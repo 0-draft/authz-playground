@@ -1,5 +1,5 @@
-// OPA の Rego コンパイラ+評価器を js/wasm に載せ、JS から呼べる形で公開する。
-// ブラウザ側で任意の Rego ソースをライブ評価するための橋渡し。
+// Exposes OPA's Rego compiler and evaluator as js/wasm callable from JavaScript,
+// so the browser can compile and evaluate arbitrary Rego source live.
 package main
 
 import (
@@ -55,7 +55,7 @@ func regoEval(_ js.Value, args []js.Value) any {
 		rego.Input(input),
 	}
 
-	// data ドキュメント (Rego から data.* で参照される)
+	// The data document, referenced from Rego as data.*
 	if strings.TrimSpace(dataJSON) != "" {
 		var data map[string]any
 		if err := json.Unmarshal([]byte(dataJSON), &data); err != nil {
