@@ -262,6 +262,43 @@ describe('the harness reports failure instead of hiding it', () => {
     }
   });
 
+  it('an engine that throws mid-evaluation is recorded, not silently denied', async () => {
+    // The prepare-failure path was covered; the decide-failure path was not, and both
+    // could be deleted with the suite still green. A deny is the correct answer to most
+    // requests, so an engine failing on every one of them otherwise reads as agreeing.
+    const throwing: PolicyEngine = {
+      meta: { ...rebacEngine.meta, id: 'throwing', name: 'Throwing' },
+      project: rebacEngine.project,
+      prepare: async () => ({
+        decide: async () => {
+          throw new Error('evaluation exploded');
+        },
+      }),
+    };
+
+    const report = await runDifferential([cedarEngine, throwing], DEFAULT_SCENARIO, step(4));
+    expect(report.errors.throwing).toContain('evaluation exploded');
+  });
+
+  it('an engine reporting an error in its result is recorded too', async () => {
+    // Cedar and Rego convert an evaluation failure into a deny plus an error string
+    // rather than throwing, so that path needs its own guard.
+    const sick: PolicyEngine = {
+      meta: { ...rebacEngine.meta, id: 'sick', name: 'Sick' },
+      project: rebacEngine.project,
+      prepare: async () => ({
+        decide: async () => ({
+          decision: 'deny' as const,
+          reason: { en: 'broken', ja: '故障' },
+          error: 'policy failed to compile',
+        }),
+      }),
+    };
+
+    const report = await runDifferential([cedarEngine, sick], DEFAULT_SCENARIO, step(4));
+    expect(report.errors.sick).toEqual(['policy failed to compile']);
+  });
+
   it('a failing engine is recorded rather than passed off as a denier', async () => {
     // A broken engine answers deny for everything, and deny is the correct answer for
     // most requests, so without this it would look like a well-behaved participant.

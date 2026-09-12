@@ -1,5 +1,3 @@
-import { createContext, useContext } from 'react';
-
 export type Lang = 'en' | 'ja';
 export const LANGS: Lang[] = ['en', 'ja'];
 export const DEFAULT_LANG: Lang = 'en';
@@ -9,18 +7,6 @@ const STORAGE_KEY = 'authz-playground.lang';
 export interface L {
   en: string;
   ja: string;
-}
-
-export const LangContext = createContext<Lang>(DEFAULT_LANG);
-
-export function useLang(): Lang {
-  return useContext(LangContext);
-}
-
-/** Resolve localized content for the active language. */
-export function useT(): (l: L) => string {
-  const lang = useLang();
-  return (l: L) => l[lang];
 }
 
 export function readStoredLang(): Lang {

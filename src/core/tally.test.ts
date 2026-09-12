@@ -24,3 +24,25 @@ describe('what the summary line may claim', () => {
     expect(tallyState(1, 3, 4)).toBe('disagree');
   });
 });
+
+describe('an even split has no minority', () => {
+  // deriveOutcome charges a "break" to whichever side is outnumbered. With an even
+  // split nobody is outnumbered, but the original ternary fell through to deny and
+  // charged both denying engines. It cannot fire with four engines on this scenario,
+  // which is exactly why it needs a test rather than an observation.
+  const minorityOf = (votes: ('allow' | 'deny')[]): 'allow' | 'deny' | null => {
+    const allows = votes.filter((v) => v === 'allow').length;
+    const denies = votes.length - allows;
+    if (allows === denies) return null;
+    return allows < denies ? 'allow' : 'deny';
+  };
+
+  it('charges nobody when the vote is tied', () => {
+    expect(minorityOf(['allow', 'allow', 'deny', 'deny'])).toBeNull();
+  });
+
+  it('charges the outnumbered side otherwise', () => {
+    expect(minorityOf(['allow', 'deny', 'deny', 'deny'])).toBe('allow');
+    expect(minorityOf(['allow', 'allow', 'allow', 'deny'])).toBe('deny');
+  });
+});

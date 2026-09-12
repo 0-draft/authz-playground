@@ -16,16 +16,7 @@ import { explainRebac, rebacEngine } from './engines/rebac';
 import { ensureRegoLoaded } from './engines/regoRuntime';
 import { RebacGraph } from './components/RebacGraph';
 import { tallyState } from './core/tally';
-import {
-  LANGS,
-  LANG_LABEL,
-  LangContext,
-  UI,
-  fill,
-  readStoredLang,
-  storeLang,
-  type Lang,
-} from './i18n';
+import { LANGS, LANG_LABEL, UI, fill, readStoredLang, storeLang, type Lang } from './i18n';
 
 const ALL_ENGINES: PolicyEngine[] = [cedarEngine, regoEngine, casbinEngine, rebacEngine];
 const SCENARIO = DEFAULT_SCENARIO;
@@ -114,10 +105,16 @@ function deriveOutcome(
     clash.push(differs);
     if (differs) {
       const allows = votes.filter((v) => v === 'allow').length;
-      const minority: Decision = allows * 2 < votes.length ? 'allow' : 'deny';
-      engines.forEach((e, k) => {
-        if (votes[k] === minority) breaks[e.meta.id] += 1;
-      });
+      const denies = votes.length - allows;
+      // An even split has no minority. The old ternary fell through to 'deny' and
+      // charged both denying engines a break for being exactly half the vote. Latent
+      // with four engines and this scenario, wrong the moment either changes.
+      if (allows !== denies) {
+        const minority: Decision = allows < denies ? 'allow' : 'deny';
+        engines.forEach((e, k) => {
+          if (votes[k] === minority) breaks[e.meta.id] += 1;
+        });
+      }
     }
   });
 
@@ -273,7 +270,7 @@ export default function App() {
   const repLabel = { native: UI.repNative, awkward: UI.repAwkward, impossible: UI.repImpossible };
 
   return (
-    <LangContext.Provider value={lang}>
+    <>
       <div className="shell">
         <a className="skip-link" href="#bench">
           {t(UI.skipToBench)}
@@ -746,6 +743,6 @@ export default function App() {
           <p>{t(UI.footer)}</p>
         </footer>
       </div>
-    </LangContext.Provider>
+    </>
   );
 }
