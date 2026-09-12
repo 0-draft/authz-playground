@@ -73,7 +73,7 @@ const SUPPORT: Record<string, RequirementSupport> = {
   R1: {
     level: 'native',
     note: {
-      en: 'A direct attribute comparison. One policy covers it.',
+      en: 'A direct attribute comparison, and Cedar verifies at compile time that the owner attribute exists.',
       ja: 'resource の属性比較そのものであり、ポリシー1本で記述できる。',
     },
   },
