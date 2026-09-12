@@ -5,6 +5,13 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
+    ignore:
+      # typescript-eslint pins its peer to typescript >=4.8.4 <6.1.0, and no release of
+      # it supports TypeScript 7 yet. Bumping the major breaks `npm ci` with ERESOLVE
+      # and takes every other dev-tooling update down with it. Drop this entry once
+      # typescript-eslint widens the range.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
     groups:
       # The policy engines are the subject of this project, so their updates are
       # reviewed one at a time rather than batched with everything else.
