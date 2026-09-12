@@ -8,3 +8,7 @@ dist/
 # rego.wasm is OPA compiled to js/wasm (~40 MB) and wasm_exec.js is copied from GOROOT.
 public/rego.wasm
 public/wasm_exec.js
+
+# Scratch artefacts from browser-driven review sessions (screenshots, page snapshots).
+/*.png
+/snap-*.md
