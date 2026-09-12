@@ -54,8 +54,8 @@ export const UI = {
     ja: '同一の要件を4つの認可エンジンで記述し、\n判定が分かれる条件を観察する',
   },
   intro: {
-    en: 'Cedar, OPA / Rego, Casbin and ReBAC. Add one rule at a time and eventually one engine can no longer express it, so its answers start to diverge. That divergence is exactly why the next generation of policy technology was invented. Every decision here is evaluated in your browser.',
-    ja: 'Cedar、OPA / Rego、Casbin、ReBAC の4エンジンを比較する。要件を1つずつ追加していくと、いずれかのエンジンが要件を表現できなくなり、判定が一致しなくなる。この不一致こそ、次世代のポリシー技術が生まれた理由である。判定はすべてブラウザ上で実行している。',
+    en: 'Cedar, OPA / Rego, Casbin and ReBAC. Add one rule at a time and eventually one engine can no longer express it, so its answers start to diverge. That divergence is where each design drew its line — and, in one case, what its authors later went back and changed. Every decision here is evaluated in your browser.',
+    ja: 'Cedar、OPA / Rego、Casbin、ReBAC の4エンジンを比較する。要件を1つずつ追加していくと、いずれかのエンジンが要件を表現できなくなり、判定が一致しなくなる。この不一致は、各設計がどこに線を引いたかを示している。そして1つのエンジンについては、開発者自身が後にその線を引き直した。判定はすべてブラウザ上で実行している。',
   },
   regoLoading: {
     en: 'Loading the OPA Rego compiler (a ~8 MB gzipped WebAssembly module). It joins the comparison as soon as it arrives.',
@@ -83,8 +83,8 @@ export const UI = {
   keyDeny: { en: 'denied', ja: '拒否' },
   keyClash: { en: 'engines disagree', ja: '判定が分かれた' },
   tallyClean: {
-    en: 'All %1 requests agree across every engine. Any paradigm can express these rules equivalently.',
-    ja: '%1 通りすべてで全エンジンの判定が一致した。この要件はいずれのパラダイムでも等価に記述できる。',
+    en: 'Every engine reaches the same answer on all %1 requests at this stage.',
+    ja: 'このステージでは %1 通りすべてで全エンジンの判定が一致した。',
   },
   tallyClash: {
     en: 'of %1 requests get different answers.',
@@ -101,8 +101,8 @@ export const UI = {
   evaluating: { en: 'evaluating…', ja: '評価中' },
   clashHead: { en: 'The engines disagree here', ja: 'このリクエストで判定が分かれている' },
   clashGeneric: {
-    en: 'The same rules are being read differently by each engine’s defaults.',
-    ja: '同一の要件であっても、エンジンごとの既定の解釈が異なっている。',
+    en: 'The engines answer this request differently, even though none of them declared the rule impossible to express.',
+    ja: 'いずれのエンジンもこの要件を表現不可能とは申告していないが、このリクエストでは判定が分かれている。',
   },
   cannotExpress: {
     en: '%1 cannot express “%2”. %3',
@@ -112,7 +112,7 @@ export const UI = {
   graphHeading: { en: 'How ReBAC reaches its answer', ja: 'ReBAC の判定過程' },
   graphLede: {
     en: 'Zanzibar-style engines treat permission as reachability in a graph. The path actually walked for the selected request is drawn in green. Notice there is nowhere in this picture to put a time of day — that is the whole reason for the disagreement above.',
-    ja: 'Zanzibar 系のエンジンは、権限をグラフ上の到達可能性として判定する。選択中のリクエストで実際に辿った経路を緑で示す。この図には時刻を与える箇所が存在しない。これが前述の不一致の原因である。',
+    ja: 'Zanzibar 系のエンジンは、権限をグラフ上の到達可能性として扱う。選択中のリクエストで実際に辿った経路を緑で示す。この図には時刻を与える箇所が存在しない。これが前述の不一致の原因である。',
   },
   graphAlt: { en: 'Relationship tuples and the path walked', ja: '関係タプルのグラフと探索経路' },
 

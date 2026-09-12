@@ -214,8 +214,8 @@ export const rebacEngine: PolicyEngine = {
     year: 2019,
     origin: 'Google (paper) / OpenFGA',
     tagline: {
-      en: 'Permission as reachability in a graph. The idea behind Google Docs sharing.',
-      ja: '権限をグラフの到達可能性として解く方式。Google Docs の共有を支えた発想である。',
+      en: 'Permission as reachability in a graph. The model behind sharing in Drive, Calendar, Photos and the rest of Google.',
+      ja: '権限をグラフの到達可能性として解く方式。Drive や Calendar をはじめとする Google 各サービスの共有を支えるモデルである。',
     },
   },
 

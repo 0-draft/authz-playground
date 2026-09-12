@@ -56,8 +56,8 @@ export const REQUIREMENTS: Record<string, Requirement> = {
   R3: {
     id: 'R3',
     label: {
-      en: 'Editing is only allowed during business hours (09:00-18:00)',
-      ja: '編集は営業時間 (9:00-18:00) のみ許可する',
+      en: 'Editing is only allowed during business hours (09:00-17:59)',
+      ja: '編集は営業時間 (9:00-17:59) のみ許可する',
     },
   },
   R4: {

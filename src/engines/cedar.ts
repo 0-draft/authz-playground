@@ -40,7 +40,8 @@ const COMMENTS: Record<string, L> = {
 
 function buildPolicies(requirements: readonly string[], lang: Lang): string {
   const has = (r: string) => requirements.includes(r);
-  // R3 costs exactly one extra condition, because context is built into the request model.
+  // R3 costs two extra comparisons and nothing else, because context is built into the
+  // request model rather than having to be threaded in.
   const hours = has('R3') ? ' && context.hour >= 9 && context.hour < 18' : '';
   const out: string[] = [];
 
@@ -93,8 +94,8 @@ const SUPPORT: Record<string, RequirementSupport> = {
   R4: {
     level: 'native',
     note: {
-      en: 'A resource attribute lookup. ABAC is what Cedar was designed for.',
-      ja: 'リソース属性の参照である。ABAC は Cedar の設計上の想定内にある。',
+      en: 'A resource attribute lookup, well within what Cedar was designed for; its syntax covers role-based, attribute-based and relation-based models alike.',
+      ja: 'リソース属性の参照であり、Cedar の設計上の想定内にある。Cedar の構文はロール・属性・関係のいずれのモデルも対象としている。',
     },
   },
 };
@@ -110,8 +111,8 @@ export const cedarEngine: PolicyEngine = {
     year: 2023,
     origin: 'AWS',
     tagline: {
-      en: 'Fast, safe, and provable. The generation that traded expressiveness for formal verification.',
-      ja: '高速性・安全性・検証可能性を優先し、形式検証できる範囲に言語を絞った世代。',
+      en: 'Fast, safe, and provable. The design that traded expressiveness for formal verification.',
+      ja: '高速性・安全性・検証可能性を優先し、形式検証できる範囲に言語を絞った設計。',
     },
   },
 
