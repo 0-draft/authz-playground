@@ -115,6 +115,10 @@ jobs:
                what the tests assert, loosens an invariant, or reduces the enumerated
                request space as a finding even when it is green.
 
+            Do not sign anything you post. No "Generated with" footer, no co-authored-by
+            line, no self-attribution of any kind, in any comment or commit. The review
+            stands on the findings, and a signature is noise on every one of them.
+
             Post findings as inline comments on the lines they concern. Use one top-level
             comment for the summary, posted with
             `gh pr comment --edit-last --create-if-none` so that a re-review replaces the

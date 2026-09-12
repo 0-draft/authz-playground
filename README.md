@@ -66,6 +66,14 @@ The ReBAC engine is not OpenFGA. It reimplements the parts that matter for under
 
 Casbin numbers role definitions consecutively from `g`, and `loadSection` stops at the first missing index. A model that declares `g2` without also declaring `g` therefore never registers the grouping at all, and the matcher ends up calling a function that was never installed. Go Casbin contains the same loop, so this is a naming constraint rather than an implementation defect, and it has been reported upstream against the Go implementation since 2018. Only one grouping is needed here, so it is named `g`.
 
+## Contributing
+
+Issues and pull requests are welcome. CI runs Prettier, ESLint, tsc, the differential
+harness, the production build, gofmt and go vet. A Claude review runs on pull requests
+as well, aimed at what the tests cannot see: a projection that grants something the
+requirements never asked for, an expressiveness rating the code does not justify, or a
+factual claim in the copy.
+
 ## Licence
 
 MIT
