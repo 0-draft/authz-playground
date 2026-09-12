@@ -3,7 +3,7 @@ import { createContext, useContext } from 'react';
 export type Lang = 'en' | 'ja';
 export const LANGS: Lang[] = ['en', 'ja'];
 export const DEFAULT_LANG: Lang = 'en';
-const STORAGE_KEY = 'policy-playground.lang';
+const STORAGE_KEY = 'authz-playground.lang';
 
 /** A piece of localized content. Both languages are always present. */
 export interface L {
@@ -46,8 +46,8 @@ export const LANG_LABEL: Record<Lang, string> = { en: 'English', ja: '日本語'
 /** Interface copy. Domain content (requirements, engines) lives next to its data. */
 export const UI = {
   docTitle: {
-    en: 'Policy Playground — four authorization engines, one set of rules',
-    ja: 'Policy Playground — 4つの認可エンジンに同一の要件を与える',
+    en: 'Authz Playground — four authorization engines, one set of rules',
+    ja: 'Authz Playground — 4つの認可エンジンに同一の要件を与える',
   },
   title: {
     en: 'Give four authorization engines the same rules,\nthen watch them disagree',

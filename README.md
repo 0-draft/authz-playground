@@ -1,4 +1,4 @@
-# Policy Playground
+# Authz Playground
 
 Give Cedar, OPA / Rego, Casbin and ReBAC (Zanzibar) the same authorization rules, then watch where their answers diverge — and why that divergence is the reason each generation of policy technology was invented.
 
@@ -10,12 +10,12 @@ One neutral scenario is defined once, with no reference to any engine. Each engi
 
 Requirements are then added one at a time:
 
-| Stage | Requirement added | What it forces |
-| --- | --- | --- |
-| 1 | The owner can edit | A single comparison. No engine needed yet. |
-| 2 | Folder admins can edit too | The decision must traverse a relationship. |
-| 3 | Editing only during business hours | Request-time context enters the decision. |
-| 4 | Public documents are viewable by anyone | A resource attribute enters the decision. |
+| Stage | Requirement added                       | What it forces                             |
+| ----- | --------------------------------------- | ------------------------------------------ |
+| 1     | The owner can edit                      | A single comparison. No engine needed yet. |
+| 2     | Folder admins can edit too              | The decision must traverse a relationship. |
+| 3     | Editing only during business hours      | Request-time context enters the decision.  |
+| 4     | Public documents are viewable by anyone | A resource attribute enters the decision.  |
 
 At stage 3 the ReBAC model stops agreeing with the others. This is not a bug in the comparison: `check(user, relation, object)` has three arguments and none of them can carry a time of day. OpenFGA added Conditions years later to close exactly this gap.
 
@@ -53,12 +53,12 @@ npm run build
 
 ## How each engine runs in the browser
 
-| Engine | How it evaluates |
-| --- | --- |
-| Cedar | Official `@cedar-policy/cedar-wasm` bindings |
+| Engine     | How it evaluates                                                       |
+| ---------- | ---------------------------------------------------------------------- |
+| Cedar      | Official `@cedar-policy/cedar-wasm` bindings                           |
 | OPA / Rego | OPA compiled to `js/wasm`, so policies are compiled and evaluated live |
-| Casbin | `casbin`, the TypeScript implementation, runs directly |
-| ReBAC | A teaching reimplementation of the Zanzibar check algorithm |
+| Casbin     | `casbin`, the TypeScript implementation, runs directly                 |
+| ReBAC      | A teaching reimplementation of the Zanzibar check algorithm            |
 
 The ReBAC engine is not OpenFGA. It reimplements the parts that matter for understanding the model — relation rewrites and tuple-to-userset traversal — and is labelled as such in the interface.
 
