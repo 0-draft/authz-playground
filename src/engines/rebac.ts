@@ -84,11 +84,14 @@ function buildDsl(requirements: readonly string[], lang: Lang): string {
     lines.push(
       '',
       lang === 'ja'
-        ? '# R3 (営業時間のみ) を記述する手段は存在しない。'
-        : '# There is no way to write R3 (business hours only) here.',
+        ? '# 古典的な Zanzibar のモデルには R3 (営業時間のみ) を記述する手段が無い。'
+        : '# The classic Zanzibar model has no way to write R3 (business hours only).',
       lang === 'ja'
-        ? '# このモデルに時刻という概念が無いためである。'
-        : '# This model has no concept of time of day.',
+        ? '# 関係の定義しか書けず、時刻を与える場所が存在しないためである。'
+        : '# It defines relations and nothing else, with nowhere to put a time of day.',
+      lang === 'ja'
+        ? '# OpenFGA はまさにこの穴を埋めるため、後年 condition ブロックを追加した。'
+        : '# OpenFGA added condition blocks years later to close exactly this gap.',
     );
   }
   return lines.join('\n');
@@ -267,8 +270,8 @@ export const rebacEngine: PolicyEngine = {
           lang: 'dsl',
           code: buildDsl(requirements, lang),
           note: {
-            en: 'The model defines relations and nothing else. There is no place in the syntax to put a condition.',
-            ja: 'モデルは関係の定義のみで構成される。条件式を記述する場所が文法上存在しない。',
+            en: 'The classic model defines relations and nothing else, with no place for a condition. Present-day OpenFGA can attach one with a condition block, which is the gap being demonstrated here rather than a limitation of the product today.',
+            ja: '古典的なモデルは関係の定義のみで構成され、条件を書く場所が無い。現在の OpenFGA は condition ブロックで条件を付与できるため、ここで示しているのは当時の欠落であって現行製品の制約ではない。',
           },
         },
         {
