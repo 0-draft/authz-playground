@@ -483,7 +483,11 @@ export default function App() {
               </span>
             </div>
 
-            <p className={`tally${tally === 'agree' ? ' clean' : ''}`} aria-live="polite">
+            <p
+              className={`tally${tally === 'agree' ? ' clean' : ''}`}
+              data-tally={tally}
+              aria-live="polite"
+            >
               {tally === 'evaluating' ? (
                 t(UI.evaluating)
               ) : tally === 'agree-partial' ? (
