@@ -152,7 +152,11 @@ export const BOUNDARY_HOURS = [0, 8, 9, 10, 17, 18, 22, 23] as const;
 export function enumerateRequests(
   scenario: Scenario,
   hours: readonly number[] = BOUNDARY_HOURS,
-  mfaValues: readonly boolean[] = [true, false],
+  // No requirement reads mfa, so enumerating both values produced an exact duplicate of
+  // every request and silently doubled totalRequests and every divergence count.
+  // The field stays because it shows context carrying more than a clock; pass [true,
+  // false] explicitly once a requirement depends on it.
+  mfaValues: readonly boolean[] = [true],
 ): AccessRequest[] {
   const out: AccessRequest[] = [];
   for (const subject of scenario.users) {

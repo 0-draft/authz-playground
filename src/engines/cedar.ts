@@ -79,8 +79,8 @@ const SUPPORT: Record<string, RequirementSupport> = {
   R2: {
     level: 'native',
     note: {
-      en: 'Follow an entity reference and test set membership. Entity hierarchy is part of the language.',
-      ja: 'entity 参照を辿って集合の包含を判定する。entity 階層が言語に組み込まれている。',
+      en: "Follow the resource's folder reference and test set membership with contains. Cedar also has an entity hierarchy and an in operator; this projection does not need them, because the relationship is held as an attribute.",
+      ja: 'resource から folder の参照を辿り、contains で集合の包含を判定する。Cedar には entity 階層と in 演算子も存在するが、この射影では関係を属性として保持しているため使用していない。',
     },
   },
   R3: {

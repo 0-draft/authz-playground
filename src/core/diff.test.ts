@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { runDifferential } from './diff';
-import { DEFAULT_SCENARIO, STEPS, enumerateRequests } from './scenario';
+import { DEFAULT_SCENARIO, STEPS, enumerateRequests, formatRequest } from './scenario';
 import type { PolicyEngine } from './engine';
+import { expectedDecision } from './oracle';
 import { cedarEngine } from '../engines/cedar';
 import { casbinEngine } from '../engines/casbin';
 import { regoEngine } from '../engines/rego';
@@ -63,6 +64,45 @@ describe('the business-hours boundary', () => {
     const hours = new Set(enumerateRequests(DEFAULT_SCENARIO).map((r) => r.context.hour));
     for (const h of [8, 9, 17, 18]) expect(hours.has(h), `hour ${h} must be sampled`).toBe(true);
   });
+});
+
+describe('every engine matches an independent reading of the requirements', () => {
+  // Agreement between engines only proves they made the same choice, not the right one.
+  // A misreading shared by all four — "the owner may also view", say — would be
+  // invisible to the differential harness. This checks each engine against a second
+  // implementation written from the requirement text alone.
+  //
+  // The single exception is ReBAC once R3 is in play: it has no way to express a time
+  // window, so disagreeing there is the structural limitation the project is about.
+  for (const engine of ALL) {
+    for (const s of STEPS) {
+      const rebacCannotExpressR3 = engine.meta.id === 'rebac' && s.requirements.includes('R3');
+
+      it(`${engine.meta.name} at stage ${s.id}${rebacCannotExpressR3 ? ' (outside business hours excepted)' : ''}`, async () => {
+        const ev = await engine.prepare(DEFAULT_SCENARIO, s.requirements);
+        const wrong: string[] = [];
+
+        for (const req of enumerateRequests(DEFAULT_SCENARIO)) {
+          const expected = expectedDecision(DEFAULT_SCENARIO, s.requirements, req);
+          const actual = (await ev.decide(req)).decision;
+          if (actual === expected) continue;
+
+          const outsideHours = req.context.hour < 9 || req.context.hour >= 18;
+          const isTheKnownLimit =
+            rebacCannotExpressR3 &&
+            req.action === 'edit' &&
+            outsideHours &&
+            actual === 'allow' &&
+            expected === 'deny';
+          if (!isTheKnownLimit) {
+            wrong.push(`${formatRequest(req)}: expected ${expected}, got ${actual}`);
+          }
+        }
+
+        expect(wrong).toEqual([]);
+      });
+    }
+  }
 });
 
 describe('detecting structural limits', () => {
