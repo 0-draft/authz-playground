@@ -65,6 +65,7 @@ export const UI = {
     en: 'An engine could not be loaded, so it is missing from the comparison below.',
     ja: 'エンジンを読み込めなかったため、以下の比較から欠落している。',
   },
+  selectedRequest: { en: 'selected:', ja: '選択中:' },
   langLabel: { en: 'Language', ja: '言語' },
   stagesLabel: { en: 'Stages', ja: 'ステージ' },
   stageOf: { en: 'Stage %1 of %2', ja: 'ステージ %1 / %2' },

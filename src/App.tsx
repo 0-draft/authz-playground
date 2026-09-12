@@ -332,18 +332,34 @@ export default function App() {
             <p className="lede">{fill(t(UI.mapLede), MAP_REQUESTS.length)}</p>
 
             <p className="map-readout">
-              {(() => {
-                const r = MAP_REQUESTS[cursor % MAP_REQUESTS.length];
-                const engine = engines[Math.floor(cursor / MAP_REQUESTS.length)] ?? engines[0];
-                const d = outcome?.decisions[engine?.meta.id ?? '']?.[cursor % MAP_REQUESTS.length];
-                return (
-                  <>
-                    {engine?.meta.name} <span className="muted">·</span> {formatRequest(r)}{' '}
-                    <span className="muted">·</span>{' '}
-                    {d ? t(d === 'allow' ? UI.keyAllow : UI.keyDeny) : t(UI.evaluating)}
-                  </>
-                );
-              })()}
+              <span className="cursor-part">
+                {(() => {
+                  const r = MAP_REQUESTS[cursor % MAP_REQUESTS.length];
+                  const engine = engines[Math.floor(cursor / MAP_REQUESTS.length)] ?? engines[0];
+                  const d =
+                    outcome?.decisions[engine?.meta.id ?? '']?.[cursor % MAP_REQUESTS.length];
+                  return (
+                    <>
+                      {engine?.meta.name} <span className="muted">·</span> {formatRequest(r)}{' '}
+                      <span className="muted">·</span>{' '}
+                      {d ? t(d === 'allow' ? UI.keyAllow : UI.keyDeny) : t(UI.evaluating)}
+                    </>
+                  );
+                })()}
+              </span>
+              {/* Clicking a cell drives a panel that sits below the fold, so the answers it
+                produces are repeated here, where the click happened. */}
+              <span className="selected-part">
+                <span className="muted">{t(UI.selectedRequest)}</span> {formatRequest(req)}
+                {engines.map((e) => {
+                  const r = live[e.meta.id];
+                  return (
+                    <span className="mini-verdict" key={e.meta.id} data-d={r?.decision}>
+                      {e.meta.name} {r ? (r.decision === 'allow' ? 'ALLOW' : 'DENY') : '…'}
+                    </span>
+                  );
+                })}
+              </span>
             </p>
 
             <div className="map-wrap">

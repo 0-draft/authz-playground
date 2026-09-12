@@ -334,6 +334,31 @@ body {
   color: var(--chalk-3);
 }
 
+.map-readout .cursor-part,
+.map-readout .selected-part {
+  display: block;
+}
+
+.map-readout .selected-part {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.mini-verdict {
+  border: 1px solid var(--line-strong);
+  padding: 1px 7px;
+  font-size: 11px;
+  color: var(--chalk-3);
+}
+
+.mini-verdict[data-d='allow'] {
+  color: var(--allow);
+  border-color: var(--allow);
+}
+
 .map-axis {
   display: grid;
   grid-template-columns: 118px 1fr;
@@ -621,16 +646,21 @@ table.matrix tbody th b {
 }
 
 /* ---------- 射影 ---------- */
+/* Column packing rather than grid: the cards differ a lot in height, and a grid row
+   sized by its tallest card left a screen of empty space under the shortest one. */
 .proj {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(430px, 1fr));
-  gap: 14px;
-  align-items: start;
+  columns: 2;
+  column-gap: 14px;
 }
 
-@media (max-width: 520px) {
+.proj-card {
+  break-inside: avoid;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 900px) {
   .proj {
-    grid-template-columns: 1fr;
+    columns: 1;
   }
 }
 
