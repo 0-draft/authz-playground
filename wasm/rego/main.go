@@ -5,8 +5,10 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"syscall/js"
+	"time"
 
 	"github.com/open-policy-agent/opa/v1/ast"
 	"github.com/open-policy-agent/opa/v1/rego"
@@ -22,13 +24,49 @@ type evalResult struct {
 	Trace   []string `json:"trace,omitempty"`
 }
 
+// Builtins that reach outside the evaluation, removed from what policies may call.
+//
+// This bridge compiles whatever Rego the page hands it, so every builtin OPA ships is
+// otherwise reachable from pasted source. http.send both makes real cross-origin
+// requests from the visitor's browser and deadlocks the single goroutine this program
+// runs on, which kills the runtime for the rest of the session. None of them are
+// needed to evaluate an authorization policy.
+var deniedBuiltinPrefixes = []string{"http.", "net.", "opa.runtime"}
+
+func restrictedCapabilities() *ast.Capabilities {
+	caps := ast.CapabilitiesForThisVersion()
+	kept := make([]*ast.Builtin, 0, len(caps.Builtins))
+	for _, b := range caps.Builtins {
+		denied := false
+		for _, prefix := range deniedBuiltinPrefixes {
+			if strings.HasPrefix(b.Name, prefix) {
+				denied = true
+				break
+			}
+		}
+		if !denied {
+			kept = append(kept, b)
+		}
+	}
+	caps.Builtins = kept
+	return caps
+}
+
 func fail(msg string) any {
 	b, _ := json.Marshal(evalResult{OK: false, Error: msg})
 	return string(b)
 }
 
 // regoEval(policySrc, query, inputJSON, dataJSON, withTrace) -> JSON string
-func regoEval(_ js.Value, args []js.Value) any {
+func regoEval(_ js.Value, args []js.Value) (result any) {
+	// A panic anywhere in the compiler or evaluator would otherwise take down the whole
+	// runtime, and the page has no way to tell that it did.
+	defer func() {
+		if r := recover(); r != nil {
+			result = fail(fmt.Sprintf("evaluation panicked: %v", r))
+		}
+	}()
+
 	if len(args) < 3 {
 		return fail("regoEval(policy, query, inputJSON, dataJSON?, withTrace?) requires 3 args")
 	}
@@ -51,6 +89,7 @@ func regoEval(_ js.Value, args []js.Value) any {
 	opts := []func(*rego.Rego){
 		rego.Query(query),
 		rego.SetRegoVersion(ast.RegoV1),
+		rego.Capabilities(restrictedCapabilities()),
 		rego.Module("policy.rego", policySrc),
 		rego.Input(input),
 	}
@@ -70,7 +109,12 @@ func regoEval(_ js.Value, args []js.Value) any {
 		opts = append(opts, rego.QueryTracer(tracer))
 	}
 
-	rs, err := rego.New(opts...).Eval(context.Background())
+	// Nothing here should take measurable time; the deadline exists so that a pathological
+	// comprehension cannot hang the one goroutine this program has.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	rs, err := rego.New(opts...).Eval(ctx)
 	if err != nil {
 		return fail(err.Error())
 	}
