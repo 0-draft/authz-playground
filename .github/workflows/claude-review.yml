@@ -65,7 +65,8 @@ jobs:
             exit 1
           fi
 
-      - uses: anthropics/claude-code-action@19dda84776b3518d98b8798e591daee763049ed3 # v1
+      - id: review
+        uses: anthropics/claude-code-action@19dda84776b3518d98b8798e591daee763049ed3 # v1
         with:
           # A subscription token, not an API key: runs against the Claude plan
           # instead of API credits. Generate it with `claude setup-token`.
@@ -128,3 +129,13 @@ jobs:
 
           claude_args: |
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+
+      # The action skips itself, successfully, when this file differs from the copy on
+      # the default branch. That protection is right, but a skipped review reported as a
+      # passing check is the exact failure this workflow exists to avoid: nothing was
+      # reviewed and the pull request looks reviewed. Say so instead.
+      - name: Report a skipped review as skipped
+        if: steps.review.conclusion == 'success' && steps.review.outputs.conclusion != 'success'
+        run: |
+          echo "::error::The review did not run. This happens when this workflow file differs from the copy on the default branch, which is expected on a pull request that edits it. Nothing was reviewed."
+          exit 1
