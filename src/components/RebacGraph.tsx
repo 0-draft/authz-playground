@@ -46,9 +46,11 @@ export function RebacGraph({
 
   const rows = Math.max(1, ...Object.values(byCol).map((c) => c.length));
   const height = 20 + rows * ROW_H;
+  // Room above the boxes for edges that have to hop a column.
+  const HEADROOM = 30;
 
   return (
-    <svg viewBox={`0 0 620 ${height}`} role="img" aria-label={label}>
+    <svg viewBox={`0 ${-HEADROOM} 620 ${height + HEADROOM}`} role="img" aria-label={label}>
       {tuples.map((t) => {
         const a = pos.get(t.user);
         const b = pos.get(t.object);
@@ -59,18 +61,21 @@ export function RebacGraph({
         const x2 = b.x;
         const y2 = b.y + BOX_H / 2;
         const mx = (x1 + x2) / 2;
+
+        // An edge spanning more than one column would otherwise run straight through
+        // whatever sits between, so the owner edge appeared to pass through the folder
+        // and the diagram contradicted the trace printed beneath it. Arc over instead.
+        const spansAColumn = x2 - x1 > BOX_W;
+        const apexY = Math.min(y1, y2) - HEADROOM + 6;
+        const d = spansAColumn
+          ? `M${x1},${y1} C${x1 + 60},${apexY} ${x2 - 60},${apexY} ${x2},${y2}`
+          : `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+        const labelY = spansAColumn ? apexY + 6 : (y1 + y2) / 2 - 5;
+
         return (
           <g key={key(t)}>
-            <path
-              className={`edge${on ? ' hit' : ''}`}
-              d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`}
-            />
-            <text
-              className={`edge-t${on ? ' hit' : ''}`}
-              x={mx}
-              y={(y1 + y2) / 2 - 5}
-              textAnchor="middle"
-            >
+            <path className={`edge${on ? ' hit' : ''}`} d={d} />
+            <text className={`edge-t${on ? ' hit' : ''}`} x={mx} y={labelY} textAnchor="middle">
               {t.relation}
             </text>
           </g>
