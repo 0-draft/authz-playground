@@ -106,7 +106,7 @@ const rowKey = (stepId: number, engineId: string) => `${stepId}:${engineId}`;
 
 export default function App() {
   const [lang, setLang] = useState<Lang>(readStoredLang);
-  const [stepId, setStepId] = useState(3);
+  const [stepId, setStepId] = useState(1);
   const [regoReady, setRegoReady] = useState(false);
   const [rows, setRows] = useState<Record<string, Decision[]>>({});
   const [failures, setFailures] = useState<Record<string, string>>({});
@@ -120,6 +120,11 @@ export default function App() {
   // Rows already computed. Held in a ref so the sweep can skip them without making
   // itself a dependency of the effect that fills it.
   const computed = useRef<Set<string>>(new Set());
+  // The grid holds 288 buttons. Exactly one is in the tab order at a time and the
+  // arrow keys move between them, so reaching the controls below no longer costs
+  // 288 presses of Tab.
+  const [cursor, setCursor] = useState(0);
+  const gridRef = useRef<HTMLDivElement>(null);
   const [req, setReq] = useState<AccessRequest>({
     subject: 'alice',
     action: 'edit',
@@ -247,6 +252,9 @@ export default function App() {
   return (
     <LangContext.Provider value={lang}>
       <div className="shell">
+        <a className="skip-link" href="#bench">
+          {t(UI.skipToBench)}
+        </a>
         <header className="masthead">
           <div className="langswitch" role="group" aria-label={t(UI.langLabel)}>
             {LANGS.map((l) => (
@@ -268,329 +276,421 @@ export default function App() {
           <p>{t(UI.intro)}</p>
         </header>
 
-        {!regoReady && !failures.rego && <p className="loadbar">{t(UI.regoLoading)}</p>}
+        <main>
+          {!regoReady && !failures.rego && <p className="loadbar">{t(UI.regoLoading)}</p>}
 
-        {Object.entries(failures).length > 0 && (
-          <p className="failbar" role="alert">
-            {t(UI.engineFailed)}
-            {Object.entries(failures).map(([id, message]) => (
-              <span key={id}>
-                {ALL_ENGINES.find((e) => e.meta.id === id)?.meta.name ?? id}: {message}
-              </span>
-            ))}
-          </p>
-        )}
-
-        <nav className="stages" aria-label={t(UI.stagesLabel)}>
-          {STEPS.map((s) => {
-            const o = deriveOutcome(rows, s.id, engines);
-            const broken = o ? Object.entries(o.breaks).filter(([, n]) => n > 0) : [];
-            return (
-              <button
-                key={s.id}
-                className="stage-btn"
-                aria-current={s.id === stepId}
-                onClick={() => setStepId(s.id)}
-              >
-                <span className="n">{fill(t(UI.stageOf), s.id, STEPS.length)}</span>
-                <span className="tt">{t(s.title)}</span>
-                {broken.length > 0 && (
-                  <span className="broke">
-                    {broken
-                      .map(([id, n]) =>
-                        fill(t(UI.broke), ALL_ENGINES.find((e) => e.meta.id === id)!.meta.name, n),
-                      )
-                      .join(' / ')}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        <p className="stage-pain">
-          <strong>+ {t(REQUIREMENTS[step.added].label)}</strong>
-          <br />
-          {t(step.pain)}
-        </p>
-
-        <section className="section">
-          <h2>{t(UI.mapHeading)}</h2>
-          <p className="lede">{fill(t(UI.mapLede), MAP_REQUESTS.length)}</p>
-
-          <div className="map-wrap">
-            <div className="map">
-              {engines.map((engine) => (
-                <div className="map-row" key={engine.meta.id}>
-                  <span className="map-label">{engine.meta.name}</span>
-                  <div
-                    className="map-cells"
-                    style={{
-                      gridTemplateColumns: `repeat(${MAP_REQUESTS.length}, minmax(0, 1fr))`,
-                    }}
-                  >
-                    {MAP_REQUESTS.map((r, i) => {
-                      const d = outcome?.decisions[engine.meta.id]?.[i];
-                      const label = `${formatRequest(r)} → ${d ?? '…'}`;
-                      return (
-                        <button
-                          key={i}
-                          className="cell"
-                          data-d={d}
-                          data-clash={outcome?.clash[i] ?? false}
-                          data-sel={i === selectedIndex}
-                          title={label}
-                          aria-label={label}
-                          onClick={() => setReq(r)}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
+          {Object.entries(failures).length > 0 && (
+            <p className="failbar" role="alert">
+              {t(UI.engineFailed)}
+              {Object.entries(failures).map(([id, message]) => (
+                <span key={id}>
+                  {ALL_ENGINES.find((e) => e.meta.id === id)?.meta.name ?? id}: {message}
+                </span>
               ))}
-            </div>
-            <div className="map-axis">
-              <span>{fill(t(UI.mapAxis), MAP_REQUESTS.length)}</span>
-            </div>
-          </div>
-
-          <div className="map-key">
-            <span>
-              <i className="a" />
-              {t(UI.keyAllow)}
-            </span>
-            <span>
-              <i />
-              {t(UI.keyDeny)}
-            </span>
-            <span>
-              <i className="c" />
-              {t(UI.keyClash)}
-            </span>
-          </div>
-
-          <p className={`tally${clashCount === 0 ? ' clean' : ''}`} aria-live="polite">
-            {clashCount === null ? (
-              t(UI.evaluating)
-            ) : clashCount === 0 ? (
-              fill(t(UI.tallyClean), MAP_REQUESTS.length)
-            ) : (
-              <>
-                <b>{clashCount}</b> {fill(t(UI.tallyClash), MAP_REQUESTS.length)}
-              </>
-            )}
-          </p>
-        </section>
-
-        <section className="section">
-          <h2>{t(UI.benchHeading)}</h2>
-          <p className="lede">{t(UI.benchLede)}</p>
-
-          <div className="bench">
-            <div className="builder">
-              <div className="field">
-                <label htmlFor="f-sub">subject</label>
-                <select
-                  id="f-sub"
-                  value={req.subject}
-                  onChange={(e) => setReq({ ...req, subject: e.target.value })}
-                >
-                  {SCENARIO.users.map((u) => (
-                    <option key={u}>{u}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="f-act">action</label>
-                <select
-                  id="f-act"
-                  value={req.action}
-                  onChange={(e) =>
-                    setReq({ ...req, action: e.target.value as AccessRequest['action'] })
-                  }
-                >
-                  {ACTIONS.map((a) => (
-                    <option key={a}>{a}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="f-res">resource</label>
-                <select
-                  id="f-res"
-                  value={req.resource}
-                  onChange={(e) => setReq({ ...req, resource: e.target.value })}
-                >
-                  {Object.keys(SCENARIO.documents).map((d) => (
-                    <option key={d}>{d}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="field">
-                <label htmlFor="f-hour">context.hour</label>
-                <p className="hour">
-                  {String(req.context.hour).padStart(2, '0')}:00
-                  <small>
-                    {req.context.hour >= 9 && req.context.hour < 18
-                      ? t(UI.withinHours)
-                      : t(UI.outsideHours)}
-                  </small>
-                </p>
-                <input
-                  id="f-hour"
-                  type="range"
-                  min={0}
-                  max={23}
-                  value={req.context.hour}
-                  onChange={(e) =>
-                    setReq({ ...req, context: { ...req.context, hour: Number(e.target.value) } })
-                  }
-                />
-              </div>
-            </div>
-
-            <div className="verdicts">
-              {engines.map((engine) => {
-                const r = live[engine.meta.id];
-                const isOdd =
-                  liveClash && r && liveDecisions.filter((d) => d === r.decision).length === 1;
-                return (
-                  <div className="verdict" key={engine.meta.id} data-clash={Boolean(isOdd)}>
-                    <h3>{engine.meta.name}</h3>
-                    <p className="meta">
-                      {engine.meta.year} · {engine.meta.origin}
-                    </p>
-                    {r ? (
-                      <>
-                        <span className="d" data-d={r.decision}>
-                          {r.decision === 'allow' ? 'ALLOW' : 'DENY'}
-                        </span>
-                        <p className="why">{r.error ?? t(r.reason)}</p>
-                      </>
-                    ) : (
-                      <span className="pending">{t(UI.evaluating)}</span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {liveClash && (
-            <div className="clash-call">
-              <p className="head">{t(UI.clashHead)}</p>
-              <p>
-                {engines
-                  .flatMap((e) => {
-                    const s = e.project(SCENARIO, requirements, lang).support;
-                    const missing = requirements.find((rq) => s[rq]?.level === 'impossible');
-                    if (!missing) return [];
-                    return [
-                      fill(
-                        t(UI.cannotExpress),
-                        e.meta.name,
-                        t(REQUIREMENTS[missing].label),
-                        t(s[missing].note),
-                      ),
-                    ];
-                  })
-                  .join(' ') || t(UI.clashGeneric)}
-              </p>
-            </div>
+            </p>
           )}
-        </section>
 
-        <section className="section">
-          <h2>{t(UI.graphHeading)}</h2>
-          <p className="lede">{t(UI.graphLede)}</p>
-          <div className="graph">
-            <RebacGraph tuples={rebac.tuples} path={rebac.path} label={t(UI.graphAlt)} />
-            <pre className="trace">{rebac.trace.join('\n')}</pre>
-          </div>
-        </section>
+          <nav className="stages" aria-label={t(UI.stagesLabel)}>
+            {STEPS.map((s) => {
+              const o = deriveOutcome(rows, s.id, engines);
+              const broken = o ? Object.entries(o.breaks).filter(([, n]) => n > 0) : [];
+              return (
+                <button
+                  key={s.id}
+                  className="stage-btn"
+                  aria-current={s.id === stepId}
+                  onClick={() => setStepId(s.id)}
+                >
+                  <span className="n">{fill(t(UI.stageOf), s.id, STEPS.length)}</span>
+                  <span className="tt">{t(s.title)}</span>
+                  {broken.length > 0 && (
+                    <span className="broke">
+                      {broken
+                        .map(([id, n]) =>
+                          fill(
+                            t(UI.broke),
+                            ALL_ENGINES.find((e) => e.meta.id === id)!.meta.name,
+                            n,
+                          ),
+                        )
+                        .join(' / ')}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
 
-        <section className="section">
-          <h2>{t(UI.matrixHeading)}</h2>
-          <p className="lede">{t(UI.matrixLede)}</p>
-          <div className="matrix-wrap">
-            <table className="matrix">
-              <thead>
-                <tr>
-                  <th scope="col">{t(UI.colRequirement)}</th>
-                  {engines.map((e) => (
-                    <th scope="col" key={e.meta.id}>
-                      {e.meta.name}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {requirements.map((rq) => (
-                  <tr key={rq}>
-                    <th scope="row">
-                      <b>{rq}</b>
-                      {t(REQUIREMENTS[rq].label)}
-                    </th>
-                    {projections.map(({ engine, projection }) => {
-                      const s = projection.support[rq];
-                      return (
-                        <td key={engine.meta.id}>
-                          <span className="rep" data-l={s.level}>
-                            {t(repLabel[s.level])}
-                          </span>
-                          <span className="rep-note">{t(s.note)}</span>
-                        </td>
-                      );
-                    })}
-                  </tr>
+          <p className="stage-pain">
+            <strong>+ {t(REQUIREMENTS[step.added].label)}</strong>
+            <br />
+            {t(step.pain)}
+          </p>
+
+          <section className="section">
+            <h2>{t(UI.mapHeading)}</h2>
+            <p className="lede">{fill(t(UI.mapLede), MAP_REQUESTS.length)}</p>
+
+            <p className="map-readout">
+              {(() => {
+                const r = MAP_REQUESTS[cursor % MAP_REQUESTS.length];
+                const engine = engines[Math.floor(cursor / MAP_REQUESTS.length)] ?? engines[0];
+                const d = outcome?.decisions[engine?.meta.id ?? '']?.[cursor % MAP_REQUESTS.length];
+                return (
+                  <>
+                    {engine?.meta.name} <span className="muted">·</span> {formatRequest(r)}{' '}
+                    <span className="muted">·</span>{' '}
+                    {d ? t(d === 'allow' ? UI.keyAllow : UI.keyDeny) : t(UI.evaluating)}
+                  </>
+                );
+              })()}
+            </p>
+
+            <div className="map-wrap">
+              <div
+                className="map"
+                role="grid"
+                aria-label={t(UI.mapHeading)}
+                ref={gridRef}
+                onKeyDown={(e) => {
+                  const cols = MAP_REQUESTS.length;
+                  const rows = engines.length;
+                  const col = cursor % cols;
+                  const row = Math.floor(cursor / cols);
+                  const move = (r: number, c: number) => {
+                    e.preventDefault();
+                    const next = r * cols + c;
+                    setCursor(next);
+                    gridRef.current
+                      ?.querySelectorAll<HTMLButtonElement>('button.cell')
+                      [next]?.focus();
+                  };
+                  if (e.key === 'ArrowRight') move(row, Math.min(cols - 1, col + 1));
+                  else if (e.key === 'ArrowLeft') move(row, Math.max(0, col - 1));
+                  else if (e.key === 'ArrowDown') move(Math.min(rows - 1, row + 1), col);
+                  else if (e.key === 'ArrowUp') move(Math.max(0, row - 1), col);
+                  else if (e.key === 'Home') move(row, 0);
+                  else if (e.key === 'End') move(row, cols - 1);
+                }}
+              >
+                {engines.map((engine, rowIndex) => (
+                  <div className="map-row" role="row" key={engine.meta.id}>
+                    <span className="map-label" role="rowheader">
+                      {engine.meta.name}
+                    </span>
+                    <div
+                      className="map-cells"
+                      style={{
+                        gridTemplateColumns: `repeat(${MAP_REQUESTS.length}, minmax(0, 1fr))`,
+                      }}
+                    >
+                      {MAP_REQUESTS.map((r, i) => {
+                        const d = outcome?.decisions[engine.meta.id]?.[i];
+                        const clash = outcome?.clash[i] ?? false;
+                        const flat = rowIndex * MAP_REQUESTS.length + i;
+                        // The engine name lives in a row header that assistive tech does
+                        // not read per cell, and disagreement was carried only by colour,
+                        // so both go into the name.
+                        const label = [
+                          engine.meta.name,
+                          formatRequest(r),
+                          d ? t(d === 'allow' ? UI.keyAllow : UI.keyDeny) : t(UI.evaluating),
+                          clash ? t(UI.keyClash) : '',
+                        ]
+                          .filter(Boolean)
+                          .join(' · ');
+                        return (
+                          <button
+                            key={i}
+                            role="gridcell"
+                            className="cell"
+                            data-d={d}
+                            data-clash={clash}
+                            data-sel={i === selectedIndex}
+                            tabIndex={flat === cursor ? 0 : -1}
+                            aria-selected={i === selectedIndex}
+                            title={label}
+                            aria-label={label}
+                            onFocus={() => setCursor(flat)}
+                            onClick={() => setReq(r)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+              </div>
+              <div className="map-axis">
+                <span>{fill(t(UI.mapAxis), MAP_REQUESTS.length)}</span>
+              </div>
+            </div>
 
-        <section className="section">
-          <h2>{t(UI.projHeading)}</h2>
-          <p className="lede">{t(UI.projLede)}</p>
-          <div className="proj">
-            {projections.map(({ engine, projection }) => (
-              <article className="proj-card" key={engine.meta.id}>
-                <header>
-                  <h3>{engine.meta.name}</h3>
-                  <span className="tag">{t(engine.meta.paradigm)}</span>
-                </header>
-                {projection.sources.map((src) => {
-                  // Collapse only the bulky data blocks so they cannot bury the policy itself.
-                  const bulky = src.code.length > 700;
-                  const body = (
-                    <>
-                      <pre>{src.code || t(UI.emptyAtStage)}</pre>
-                      {src.note && <p className="note">{t(src.note)}</p>}
-                    </>
-                  );
+            <div className="map-key">
+              <span>
+                <i className="a" />
+                {t(UI.keyAllow)}
+              </span>
+              <span>
+                <i />
+                {t(UI.keyDeny)}
+              </span>
+              <span>
+                <i className="c" />
+                {t(UI.keyClashDeny)}
+              </span>
+              <span>
+                <i className="ca" />
+                {t(UI.keyClashAllow)}
+              </span>
+            </div>
+
+            <p className={`tally${clashCount === 0 ? ' clean' : ''}`} aria-live="polite">
+              {clashCount === null ? (
+                t(UI.evaluating)
+              ) : clashCount === 0 ? (
+                fill(t(UI.tallyClean), MAP_REQUESTS.length)
+              ) : (
+                <>
+                  <b>{clashCount}</b> {fill(t(UI.tallyClash), MAP_REQUESTS.length)}
+                </>
+              )}
+            </p>
+          </section>
+
+          <section className="section" id="bench">
+            <h2>{t(UI.benchHeading)}</h2>
+            <p className="lede">{t(UI.benchLede)}</p>
+
+            <div className="bench">
+              <div className="builder">
+                <div className="field">
+                  <label htmlFor="f-sub">subject</label>
+                  <select
+                    id="f-sub"
+                    value={req.subject}
+                    onChange={(e) => setReq({ ...req, subject: e.target.value })}
+                  >
+                    {SCENARIO.users.map((u) => (
+                      <option key={u}>{u}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="f-act">action</label>
+                  <select
+                    id="f-act"
+                    value={req.action}
+                    onChange={(e) =>
+                      setReq({ ...req, action: e.target.value as AccessRequest['action'] })
+                    }
+                  >
+                    {ACTIONS.map((a) => (
+                      <option key={a}>{a}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="f-res">resource</label>
+                  <select
+                    id="f-res"
+                    value={req.resource}
+                    onChange={(e) => setReq({ ...req, resource: e.target.value })}
+                  >
+                    {Object.keys(SCENARIO.documents).map((d) => (
+                      <option key={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="field">
+                  <label htmlFor="f-hour">context.hour</label>
+                  <p className="hour">
+                    {String(req.context.hour).padStart(2, '0')}:00
+                    <small>
+                      {req.context.hour >= 9 && req.context.hour < 18
+                        ? t(UI.withinHours)
+                        : t(UI.outsideHours)}
+                    </small>
+                  </p>
+                  <input
+                    id="f-hour"
+                    type="range"
+                    min={0}
+                    max={23}
+                    value={req.context.hour}
+                    onChange={(e) =>
+                      setReq({ ...req, context: { ...req.context, hour: Number(e.target.value) } })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="verdicts">
+                {engines.map((engine) => {
+                  const r = live[engine.meta.id];
+                  const isOdd =
+                    liveClash && r && liveDecisions.filter((d) => d === r.decision).length === 1;
                   return (
-                    <div className="src" key={src.label}>
-                      {bulky ? (
-                        <details>
-                          <summary>
-                            {src.label}
-                            <span>{fill(t(UI.lineCount), src.code.split('\n').length)}</span>
-                          </summary>
-                          {body}
-                        </details>
-                      ) : (
+                    <div className="verdict" key={engine.meta.id} data-clash={Boolean(isOdd)}>
+                      <h3>{engine.meta.name}</h3>
+                      <p className="meta">
+                        {engine.meta.year} · {engine.meta.origin}
+                      </p>
+                      {r ? (
                         <>
-                          <p className="src-name">{src.label}</p>
-                          {body}
+                          <span className="d" data-d={r.decision}>
+                            {r.decision === 'allow' ? 'ALLOW' : 'DENY'}
+                          </span>
+                          <p className="why">{r.error ?? t(r.reason)}</p>
                         </>
+                      ) : (
+                        <span className="pending">{t(UI.evaluating)}</span>
                       )}
                     </div>
                   );
                 })}
-              </article>
-            ))}
-          </div>
-        </section>
+              </div>
+            </div>
+
+            <p className="sr-only" role="status" aria-live="polite">
+              {formatRequest(req)} —{' '}
+              {engines
+                .map((e) =>
+                  fill(
+                    t(UI.verdictSummary),
+                    e.meta.name,
+                    live[e.meta.id]
+                      ? t(live[e.meta.id].decision === 'allow' ? UI.keyAllow : UI.keyDeny)
+                      : t(UI.evaluating),
+                  ),
+                )
+                .join(', ')}
+            </p>
+
+            {liveClash && (
+              <div className="clash-call">
+                <p className="head">{t(UI.clashHead)}</p>
+                <p>
+                  {engines
+                    .flatMap((e) => {
+                      const s = e.project(SCENARIO, requirements, lang).support;
+                      const missing = requirements.find((rq) => s[rq]?.level === 'impossible');
+                      if (!missing) return [];
+                      return [
+                        fill(
+                          t(UI.cannotExpress),
+                          e.meta.name,
+                          t(REQUIREMENTS[missing].label),
+                          t(s[missing].note),
+                        ),
+                      ];
+                    })
+                    .join(' ') || t(UI.clashGeneric)}
+                </p>
+              </div>
+            )}
+          </section>
+
+          <section className="section">
+            <h2>{t(UI.graphHeading)}</h2>
+            <p className="lede">{t(UI.graphLede)}</p>
+            <div className="graph" tabIndex={0} role="region" aria-label={t(UI.graphAlt)}>
+              <RebacGraph tuples={rebac.tuples} path={rebac.path} label={t(UI.graphAlt)} />
+              <pre className="trace">{rebac.trace.join('\n')}</pre>
+            </div>
+          </section>
+
+          <section className="section">
+            <h2>{t(UI.matrixHeading)}</h2>
+            <p className="lede">{t(UI.matrixLede)}</p>
+            <div
+              className="matrix-wrap"
+              tabIndex={0}
+              role="region"
+              aria-label={t(UI.matrixHeading)}
+            >
+              <table className="matrix">
+                <thead>
+                  <tr>
+                    <th scope="col">{t(UI.colRequirement)}</th>
+                    {engines.map((e) => (
+                      <th scope="col" key={e.meta.id}>
+                        {e.meta.name}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {requirements.map((rq) => (
+                    <tr key={rq}>
+                      <th scope="row">
+                        <b>{rq}</b>
+                        {t(REQUIREMENTS[rq].label)}
+                      </th>
+                      {projections.map(({ engine, projection }) => {
+                        const s = projection.support[rq];
+                        return (
+                          <td key={engine.meta.id}>
+                            <span className="rep" data-l={s.level}>
+                              {t(repLabel[s.level])}
+                            </span>
+                            <span className="rep-note">{t(s.note)}</span>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="section">
+            <h2>{t(UI.projHeading)}</h2>
+            <p className="lede">{t(UI.projLede)}</p>
+            <div className="proj">
+              {projections.map(({ engine, projection }) => (
+                <article className="proj-card" key={engine.meta.id}>
+                  <header>
+                    <h3>{engine.meta.name}</h3>
+                    <span className="tag">{t(engine.meta.paradigm)}</span>
+                  </header>
+                  {projection.sources.map((src) => {
+                    // Collapse only the bulky data blocks so they cannot bury the policy itself.
+                    const bulky = src.code.length > 700;
+                    const body = (
+                      <>
+                        <pre tabIndex={0} role="region" aria-label={src.label}>
+                          {src.code || t(UI.emptyAtStage)}
+                        </pre>
+                        {src.note && <p className="note">{t(src.note)}</p>}
+                      </>
+                    );
+                    return (
+                      <div className="src" key={src.label}>
+                        {bulky ? (
+                          <details>
+                            <summary>
+                              {src.label}
+                              <span className="lines">
+                                {fill(t(UI.lineCount), src.code.split('\n').length)}
+                              </span>
+                            </summary>
+                            {body}
+                          </details>
+                        ) : (
+                          <>
+                            <p className="src-name">{src.label}</p>
+                            {body}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
+                </article>
+              ))}
+            </div>
+          </section>
+        </main>
 
         <footer className="foot">
           <p>{t(UI.footer)}</p>

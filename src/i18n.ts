@@ -82,6 +82,16 @@ export const UI = {
   keyAllow: { en: 'allowed', ja: '許可' },
   keyDeny: { en: 'denied', ja: '拒否' },
   keyClash: { en: 'engines disagree', ja: '判定が分かれた' },
+  keyClashDeny: { en: 'denied · engines disagree', ja: '拒否 · 判定が分かれた' },
+  keyClashAllow: { en: 'allowed · the outlier', ja: '許可 · 単独で判断が異なる' },
+  verdictSummary: {
+    en: '%1: %2',
+    ja: '%1: %2',
+  },
+  skipToBench: {
+    en: 'Skip the grid and go to the request panel',
+    ja: 'グリッドを飛ばして評価パネルへ',
+  },
   tallyClean: {
     en: 'Every engine reaches the same answer on all %1 requests at this stage.',
     ja: 'このステージでは %1 通りすべてで全エンジンの判定が一致した。',
