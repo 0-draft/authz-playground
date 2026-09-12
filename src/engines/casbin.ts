@@ -17,9 +17,11 @@ function buildModel(requirements: readonly string[]): string {
   // R3 must apply to edit only, so the per-action branch is embedded in the expression too.
   if (has('R3')) conds.push('(r.act != "edit" || (r.hour >= 9 && r.hour < 18))');
 
-  // NOTE: Casbin convention would name an object grouping g2, but node-casbin 5.51.1
-  // passes the g-function's unresolved Promise into the matcher for any named
-  // definition beyond g, which always throws. Only one grouping is needed here, so g is used.
+  // Casbin numbers role definitions consecutively from g, and loadSection stops at the
+  // first missing index, so declaring g2 without g registers no grouping at all and the
+  // matcher calls a function that was never installed. Go Casbin has the same loop, so
+  // this is a naming constraint rather than a node-casbin defect. Convention pairs g
+  // (user roles) with g2 (resource roles); only one grouping is needed here, so it is g.
   const roleDef = has('R2') ? '\n[role_definition]\ng = _, _\n' : '\n';
 
   return `[request_definition]
@@ -40,8 +42,8 @@ function buildPolicy(scenario: Scenario, requirements: readonly string[]): strin
   const rows: string[] = [];
 
   for (const [doc, d] of Object.entries(scenario.documents)) {
-    // R1: ownership is data rather than a role, so it has to be expanded
-    // into one policy row per document.
+    // R1: with the resource passed as an opaque id, ownership is data rather than a
+    // role, so it has to be expanded into one policy row per document.
     if (has('R1')) rows.push(`p, ${d.owner}, ${doc}, edit`);
     // R4: "anyone" becomes a wildcard row.
     if (has('R4') && d.isPublic) rows.push(`p, *, ${doc}, view`);
@@ -71,8 +73,8 @@ const SUPPORT: Record<string, RequirementSupport> = {
   R1: {
     level: 'awkward',
     note: {
-      en: 'Ownership is an attribute, not a role, so it must be expanded into one policy row per document. Add a document and the table has to be regenerated or it is silently wrong.',
-      ja: 'owner は属性でありロールではないため、document 1件ごとにポリシー行へ展開する必要がある。document が追加されるたびに表を再生成しなければ、判定が静かに誤る。',
+      en: 'This projection passes the resource as an opaque id, so ownership has to be expanded into one policy row per document and the table must be regenerated whenever a document is added. Casbin can avoid that in ABAC mode by passing the resource as an object and matching r.sub == r.obj.owner, at the cost of the policy table no longer being the whole policy.',
+      ja: 'この射影は resource を不透明な ID として渡すため、所有関係を document 1件ごとのポリシー行へ展開する必要があり、document が追加されるたびに表の再生成を要する。Casbin は ABAC モードで resource をオブジェクトとして渡し r.sub == r.obj.owner と記述すればこれを回避できるが、その場合はポリシー表がポリシーの全体ではなくなる。',
     },
   },
   R2: {
@@ -85,8 +87,8 @@ const SUPPORT: Record<string, RequirementSupport> = {
   R3: {
     level: 'awkward',
     note: {
-      en: 'The hour is appended to the request tuple and tested inside the matcher. The per-action branch ends up in the same expression, which degrades readability quickly.',
-      ja: 'request タプルに hour を追加し、matcher 式の中で判定する。action ごとの分岐も同じ式に含まれるため、可読性が急速に低下する。',
+      en: 'In this projection the hour is appended to the request tuple and tested inside the matcher, so the per-action branch lands in the same expression and readability degrades quickly. Casbin can instead move a condition into the policy row with eval(), keeping the matcher fixed, though node-casbin has open defects around eval().',
+      ja: 'この射影では hour を request タプルに追加し matcher 式の中で判定するため、action ごとの分岐も同じ式に入り可読性が急速に低下する。Casbin には条件をポリシー行側へ移して matcher を固定できる eval() もあるが、node-casbin では eval() に未解決の不具合がある。',
     },
   },
   R4: {
@@ -99,8 +101,8 @@ const SUPPORT: Record<string, RequirementSupport> = {
 };
 
 const MODEL_NOTE: L = {
-  en: 'Conditions accumulate in one matcher line as requirements grow. This is where Casbin readability gives out.',
-  ja: '要件が増えるほど matcher の1行に条件が積み上がる。ここが Casbin の可読性の限界点である。',
+  en: 'Written this way, conditions accumulate in one matcher line as requirements grow. This is where that style gives out.',
+  ja: 'この書き方では、要件が増えるほど matcher の1行に条件が積み上がる。この方式の可読性はここで限界に達する。',
 };
 
 const POLICY_NOTE: L = {
@@ -117,7 +119,7 @@ export const casbinEngine: PolicyEngine = {
       ja: 'モデル定義とポリシー表を matcher 式で評価する方式',
     },
     year: 2017,
-    origin: 'Open source (Yang Luo)',
+    origin: 'Apache Casbin (incubating) / Yang Luo',
     tagline: {
       en: 'A general engine whose access model is swapped out by configuration. RBAC or ABAC, depending on the matcher.',
       ja: 'モデルを設定ファイルで差し替える汎用エンジン。RBAC にも ABAC にも matcher 次第で対応する。',

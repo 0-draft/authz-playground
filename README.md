@@ -1,6 +1,6 @@
 # Authz Playground
 
-Give Cedar, OPA / Rego, Casbin and ReBAC (Zanzibar) the same authorization rules, then watch where their answers diverge — and why that divergence is the reason each generation of policy technology was invented.
+Give Cedar, OPA / Rego, Casbin and ReBAC (Zanzibar) the same authorization rules, then watch where their answers diverge — and what each design gave up to draw its line where it did.
 
 Everything runs in the browser. There is no backend.
 
@@ -21,7 +21,7 @@ At stage 3 the ReBAC model stops agreeing with the others. This is not a bug in 
 
 ## Why the comparison can be trusted
 
-"Send the same request to four engines" is not well defined, because the engines do not share an input model. Cedar takes a fixed `(principal, action, resource, context)` tuple, Rego takes arbitrary JSON, Casbin takes a variable-length tuple matched by an expression, and Zanzibar takes `(user, relation, object)` with no context at all.
+"Send the same request to four engines" is not well defined, because the engines do not share an input model. Cedar takes a fixed `(principal, action, resource, context)` tuple, Rego takes arbitrary JSON, Casbin takes a variable-length tuple matched by an expression, and Zanzibar takes `(user, relation, object)`, with no place in the model for an attribute condition.
 
 So the projections are the interesting part, and their fidelity is verified mechanically. A differential harness enumerates every request the scenario can produce and runs all of them through every engine. A disagreement has only two possible causes:
 
@@ -62,9 +62,9 @@ npm run build
 
 The ReBAC engine is not OpenFGA. It reimplements the parts that matter for understanding the model — relation rewrites and tuple-to-userset traversal — and is labelled as such in the interface.
 
-## Notes found along the way
+## A note on Casbin role definitions
 
-`node-casbin` 5.51.1 cannot use any named role definition beyond `g`. With `g2` or `g3`, the g-function's unresolved Promise reaches the matcher and evaluation always throws with `matcher result should only be of type boolean, number, or string`. Go Casbin handles this correctly. Only one grouping is needed here, so the object grouping is named `g`.
+Casbin numbers role definitions consecutively from `g`, and `loadSection` stops at the first missing index. A model that declares `g2` without also declaring `g` therefore never registers the grouping at all, and the matcher ends up calling a function that was never installed. Go Casbin contains the same loop, so this is a naming constraint rather than an implementation defect, and it has been reported upstream against the Go implementation since 2018. Only one grouping is needed here, so it is named `g`.
 
 ## Licence
 
