@@ -28,7 +28,8 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.25'
+          # Track whatever the module requires instead of pinning a version here.
+          go-version-file: wasm/rego/go.mod
           cache-dependency-path: wasm/rego/go.sum
 
       - run: npm ci

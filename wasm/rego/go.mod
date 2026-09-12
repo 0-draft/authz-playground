@@ -1,4 +1,4 @@
-module policyplayground/wasm/rego
+module authzplayground/wasm/rego
 
 go 1.27.1
 
