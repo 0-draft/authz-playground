@@ -46,8 +46,10 @@ export function RebacGraph({
 
   const rows = Math.max(1, ...Object.values(byCol).map((c) => c.length));
   const height = 20 + rows * ROW_H;
-  // Room above the boxes for edges that have to hop a column.
-  const HEADROOM = 30;
+  // Room above the boxes for edges that have to hop a column, and how far clear of a
+  // box the curve itself must actually pass.
+  const HEADROOM = 44;
+  const ARC_CLEARANCE = 10;
 
   return (
     <svg viewBox={`0 ${-HEADROOM} 620 ${height + HEADROOM}`} role="img" aria-label={label}>
@@ -62,15 +64,28 @@ export function RebacGraph({
         const y2 = b.y + BOX_H / 2;
         const mx = (x1 + x2) / 2;
 
-        // An edge spanning more than one column would otherwise run straight through
-        // whatever sits between, so the owner edge appeared to pass through the folder
-        // and the diagram contradicted the trace printed beneath it. Arc over instead.
+        // An edge spanning more than one column runs straight through whatever sits
+        // between, so the owner edge appeared to pass through the folder and the diagram
+        // contradicted the trace printed beneath it.
+        //
+        // Arcing over it is not as simple as lifting the control points: a cubic never
+        // reaches them. For a symmetric curve the highest point is at t=0.5 and equals
+        // (y1 + 3·cy + 3·cy + y2) / 8, so placing the control points just above the box
+        // still left the curve clipping its corners. Solve for the control height that
+        // puts the curve itself the wanted distance clear instead.
         const spansAColumn = x2 - x1 > BOX_W;
-        const apexY = Math.min(y1, y2) - HEADROOM + 6;
+        const peak = Math.min(y1, y2) - BOX_H / 2 - ARC_CLEARANCE;
+        const apexY = (8 * peak - y1 - y2) / 6;
         const d = spansAColumn
           ? `M${x1},${y1} C${x1 + 60},${apexY} ${x2 - 60},${apexY} ${x2},${y2}`
           : `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
-        const labelY = spansAColumn ? apexY + 6 : (y1 + y2) / 2 - 5;
+        // Two edges into the same object share a midpoint, so their labels landed on top
+        // of each other. Stagger by how many arcs already end there.
+        const siblings = tuples.filter(
+          (o) => o.object === t.object && pos.has(o.user) && pos.get(o.user)!.x + BOX_W < b.x,
+        );
+        const rank = siblings.findIndex((o) => key(o) === key(t));
+        const labelY = spansAColumn ? peak - 4 - Math.max(0, rank) * 12 : (y1 + y2) / 2 - 5;
 
         return (
           <g key={key(t)}>

@@ -87,8 +87,8 @@ const SUPPORT: Record<string, RequirementSupport> = {
   R3: {
     level: 'native',
     note: {
-      en: 'Context is the fourth element of a request from the start, so this is one extra condition.',
-      ja: 'context がリクエストの第4項として最初から存在するため、条件を1つ追加するだけで済む。',
+      en: 'Context is the fourth element of a request from the start, so this costs two extra comparisons and no restructuring.',
+      ja: 'context がリクエストの第4項として最初から存在するため、比較を2つ加えるだけで済み、構造を変える必要がない。',
     },
   },
   R4: {

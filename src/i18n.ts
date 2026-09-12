@@ -54,8 +54,8 @@ export const UI = {
     ja: '同一の要件を4つの認可エンジンで記述し、\n判定が分かれる条件を観察する',
   },
   intro: {
-    en: 'Cedar, OPA / Rego, Casbin and ReBAC. Add one rule at a time and eventually one engine can no longer express it, so its answers start to diverge. That divergence is where each design drew its line — and, in one case, what its authors later went back and changed. Every decision here is evaluated in your browser.',
-    ja: 'Cedar、OPA / Rego、Casbin、ReBAC の4エンジンを比較する。要件を1つずつ追加していくと、いずれかのエンジンが要件を表現できなくなり、判定が一致しなくなる。この不一致は、各設計がどこに線を引いたかを示している。そして1つのエンジンについては、開発者自身が後にその線を引き直した。判定はすべてブラウザ上で実行している。',
+    en: 'Cedar, OPA / Rego, Casbin and ReBAC. Add one rule at a time and eventually one engine can no longer express it, so its answers start to diverge. That divergence is where each design drew its line — and, in one case, what OpenFGA went back and changed. Every decision here is evaluated in your browser.',
+    ja: 'Cedar、OPA / Rego、Casbin、ReBAC の4エンジンを比較する。要件を1つずつ追加していくと、いずれかのエンジンが要件を表現できなくなり、判定が一致しなくなる。この不一致は、各設計がどこに線を引いたかを示している。そして1つのエンジンについては、後年 OpenFGA がその線を引き直した。判定はすべてブラウザ上で実行している。',
   },
   regoLoading: {
     en: 'Loading the OPA Rego compiler (a ~8 MB gzipped WebAssembly module). It joins the comparison as soon as it arrives.',
@@ -73,7 +73,7 @@ export const UI = {
 
   mapHeading: { en: 'Divergence map', ja: '判定差分マップ' },
   mapLede: {
-    en: 'Every one of the %1 requests this scenario allows, evaluated under this stage’s rules. One square is one request; filled means allowed. Only the columns where the engines disagree are marked in pink. Select a square to load that request into the panel below.',
+    en: 'Every one of the %1 requests this scenario can produce, evaluated under this stage’s rules. One square is one request; filled means allowed. Only the columns where the engines disagree are marked in pink. Select a square to load that request into the panel below.',
     ja: 'このステージの要件で、シナリオ上ありうる %1 通りのリクエストをすべて評価した結果である。1マスが1リクエストを表し、塗りつぶしは許可を示す。エンジン間で判定が分かれた列のみ桃色で強調される。セルを選択すると、そのリクエストを下の評価パネルに読み込む。',
   },
   mapAxis: {
