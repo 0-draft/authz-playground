@@ -26,7 +26,7 @@ jobs:
 
       # The Rego engine is OPA compiled to js/wasm. It is not committed, so the
       # tests and the build both need a Go toolchain to produce it first.
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           # Track whatever the module requires instead of pinning a version here.
           go-version-file: wasm/rego/go.mod
@@ -75,7 +75,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           # Track whatever the module requires instead of pinning a version here.
           go-version-file: wasm/rego/go.mod
