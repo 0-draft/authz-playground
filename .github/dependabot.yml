@@ -1,0 +1,29 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # The policy engines are the subject of this project, so their updates are
+      # reviewed one at a time rather than batched with everything else.
+      policy-engines:
+        patterns:
+          - '@cedar-policy/*'
+          - 'casbin'
+      dev-tooling:
+        dependency-type: development
+        patterns:
+          - '*'
+
+  - package-ecosystem: gomod
+    directory: /wasm/rego
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

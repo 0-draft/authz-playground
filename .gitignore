@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.playwright-mcp/
+*.local
+*.tsbuildinfo
+
+# Build artefacts of the Rego engine. `npm run build:wasm` regenerates both:
+# rego.wasm is OPA compiled to js/wasm (~40 MB) and wasm_exec.js is copied from GOROOT.
+public/rego.wasm
+public/wasm_exec.js

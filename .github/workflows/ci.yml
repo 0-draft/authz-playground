@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      # The Rego engine is OPA compiled to js/wasm. It is not committed, so the
+      # tests and the build both need a Go toolchain to produce it first.
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache-dependency-path: wasm/rego/go.sum
+
+      - run: npm ci
+
+      - name: Build the Rego WebAssembly module
+        run: npm run build:wasm
+
+      - run: npm run format:check
+
+      - run: npm run lint
+
+      - run: npm run typecheck
+
+      # The differential harness is the project's core claim: engines that should
+      # agree must agree, and the one that cannot express a rule must be the only
+      # one that diverges. A failure here means the comparison is no longer honest.
+      - run: npm test
+
+      - run: npm run build
+
+  gofmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.25'
+          cache-dependency-path: wasm/rego/go.sum
+      - name: Check gofmt
+        working-directory: wasm/rego
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: go vet
+        working-directory: wasm/rego
+        env:
+          GOOS: js
+          GOARCH: wasm
+        run: go vet ./...
