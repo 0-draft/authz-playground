@@ -1,0 +1,126 @@
+name: Claude review
+
+# CI answers "does it build and do the tests pass". This asks the question no
+# script here can. It reviews, it does not gate: nothing here is a required
+# check.
+#
+# The action refuses to run when this file differs from the copy on the default
+# branch, so a pull request cannot rewrite its own reviewer. The cost is that
+# any change to this file, including the one that added it, goes unreviewed by
+# Claude until it is merged.
+
+on:
+  pull_request:
+    # converted_to_draft is here to cancel, not to run. The job skips drafts, so
+    # the run this starts exists only to take over the concurrency group and stop
+    # a review of a pull request its author has just pulled back.
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+
+permissions: {}
+
+# One review per pull request. A rapid re-push cancels the run it superseded
+# rather than paying for a review of a diff that no longer exists.
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # A pull request from a fork gets no secrets, so the job would fail on
+    # authentication rather than say anything useful. Dependabot is same-repo but
+    # is handed dependabot secrets rather than the repository's, so it would fail
+    # the token check and paint every dependency bump red; the type check keeps
+    # every bot out for the same reason. Drafts are skipped until they are marked
+    # ready, which is what the ready_for_review trigger is for.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.user.type == 'User' &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      # Required by the action's default GitHub App authentication.
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          # Nothing here pushes, and the action authenticates through the GitHub
+          # App rather than this token. Leaving the token in the workspace git
+          # config only widens what the third-party action can reach.
+          persist-credentials: false
+
+      # Without the secret the action exits successfully having reviewed
+      # nothing, which is worse than failing: the check goes green and the
+      # pull request looks reviewed. Fail here instead, where the reason is
+      # legible.
+      - name: Require the token
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "::error::CLAUDE_CODE_OAUTH_TOKEN is not set. Generate one with 'claude setup-token', then: gh secret set CLAUDE_CODE_OAUTH_TOKEN"
+            exit 1
+          fi
+
+      - uses: anthropics/claude-code-action@6b082c41935b4c8a3b8b0ef85ba4ba4d9eeb8975 # v1
+        with:
+          # A subscription token, not an API key: runs against the Claude plan
+          # instead of API credits. Generate it with `claude setup-token`.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR: ${{ github.event.pull_request.number }}
+
+            This repository is a teaching tool. It defines one engine-neutral scenario and
+            four requirements, projects them into four authorization engines (Cedar, OPA
+            Rego, Casbin, and a Zanzibar-style ReBAC model), and shows where those engines
+            disagree. Its entire value rests on two things being true: the projections are
+            faithful translations of the requirements, and the explanatory text is correct.
+
+            Do not repeat what CI already does. Prettier, ESLint, tsc, vitest, the
+            production build, gofmt and go vet all run on this PR already, so formatting,
+            types, lint and test failures are covered.
+
+            Look for what only a reader can catch:
+
+            1. Projection fidelity. Each engine adapter must implement exactly the
+               requirements listed for the stage, no more and no less. The dangerous change
+               is one that looks natural in a single engine and quietly grants or denies
+               something the requirements never specified, because it makes the comparison
+               dishonest while every test still passes. This has already happened once: a
+               ReBAC viewer relation was given "or editor", which reads as obvious but was
+               not in the requirements and doubled the reported divergences.
+
+            2. Declared expressiveness versus real behaviour. Every engine declares a level
+               of native, awkward or impossible per requirement, with a note explaining why.
+               Check that a changed note or level is actually justified by the code beside
+               it, and that no engine is being rated unfairly. A level that flatters one
+               engine or dismisses another is a correctness bug in this repository.
+
+            3. Factual claims. Years, attributions, and any historical statement about why a
+               feature exists. This project asserts things such as classic Zanzibar having
+               no request-time context and OpenFGA adding Conditions to close that gap. A
+               new or edited claim needs to be true, not merely plausible.
+
+            4. Content parity and register. Every user-facing string carries an en and a ja
+               value. Check that both say the same thing, that no new string bypasses the
+               i18n module, and that the Japanese is plain technical prose rather than
+               colloquial or translationese.
+
+            5. Weakening the trust anchor. The differential harness and its tests are what
+               let this project claim the comparison is fair. Treat a change that narrows
+               what the tests assert, loosens an invariant, or reduces the enumerated
+               request space as a finding even when it is green.
+
+            Post findings as inline comments on the lines they concern. Use one top-level
+            comment for the summary, posted with
+            `gh pr comment --edit-last --create-if-none` so that a re-review replaces the
+            previous summary rather than stacking another one underneath it. Be specific and
+            cite `file:line`. If the diff is clean against all of the above, say so in one
+            line rather than manufacturing nits.
+
+          claude_args: |
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
