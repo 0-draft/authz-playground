@@ -3,7 +3,7 @@
 // — relation rewrites and tuple-to-userset traversal — has the same structure.
 import type { Evaluator, PolicyEngine, Projection, RequirementSupport } from '../core/engine';
 import { allow, deny } from '../core/engine';
-import type { AccessRequest, Scenario } from '../core/scenario';
+import type { AccessRequest, Action, Scenario } from '../core/scenario';
 import type { Lang } from '../i18n';
 
 export interface Tuple {
@@ -13,8 +13,12 @@ export interface Tuple {
 }
 
 type Rewrite =
-  /** Holds if a direct tuple exists. */
-  | { kind: 'this' }
+  /**
+   * Holds if a direct tuple exists. `wildcard` mirrors OpenFGA's type restrictions:
+   * `user:*` only grants the relation when the model declares `[user, user:*]`, so a
+   * stray wildcard tuple written against `owner` does not silently make everyone owner.
+   */
+  | { kind: 'this'; wildcard?: boolean }
   /** Delegates to another relation on the same object. */
   | { kind: 'computed'; relation: string }
   /** Follows a tupleset and checks a relation on what it points at. The heart of Zanzibar. */
@@ -58,7 +62,7 @@ function buildRewrites(requirements: readonly string[]): Record<string, Rewrite[
     // R4 grants viewing to anyone on a public document, and nothing more.
     // "Editors can also view" looks natural but is not in the requirements;
     // adding it would make this engine disagree with the other three.
-    'document#viewer': has('R4') ? [{ kind: 'this' }] : [],
+    'document#viewer': has('R4') ? [{ kind: 'this', wildcard: true }] : [],
     'folder#admin': [{ kind: 'this' }],
   };
 }
@@ -90,6 +94,8 @@ function buildDsl(requirements: readonly string[], lang: Lang): string {
   return lines.join('\n');
 }
 
+const MAX_DEPTH = 10;
+
 function objectType(object: string): string {
   return object.split(':')[0];
 }
@@ -111,7 +117,12 @@ function check(
 ): boolean {
   const indent = '  '.repeat(depth);
   trace.push(`${indent}check(${user}, ${relation}, ${object})`);
-  if (depth > 10) return false;
+  if (depth > MAX_DEPTH) {
+    // Unreachable in this model, whose deepest path is two hops. Marked rather than
+    // returned as a plain deny so a cycle could never be mistaken for "not permitted".
+    trace.push(`${indent}  aborted: exceeded ${MAX_DEPTH} levels of rewrite`);
+    return false;
+  }
 
   const rules = rewrites[`${objectType(object)}#${relation}`] ?? [];
   for (const rule of rules) {
@@ -120,7 +131,7 @@ function check(
         (t) =>
           t.object === object &&
           t.relation === relation &&
-          (t.user === user || t.user === 'user:*'),
+          (t.user === user || (rule.wildcard === true && t.user === 'user:*')),
       );
       if (hit) {
         trace.push(`${indent}  match: ${hit.user} ${hit.relation} ${hit.object}`);
@@ -146,8 +157,36 @@ function check(
   return false;
 }
 
-export function actionToRelation(action: string): string {
-  return action === 'edit' ? 'editor' : action === 'view' ? 'viewer' : 'deleter';
+/**
+ * Actions map to relations one for one. Written as an exhaustive switch so that adding
+ * an action to ACTIONS fails to compile instead of silently aliasing onto `deleter`,
+ * which is what a trailing ternary did.
+ */
+export function actionToRelation(action: Action): string {
+  switch (action) {
+    case 'edit':
+      return 'editor';
+    case 'view':
+      return 'viewer';
+    case 'delete':
+      return 'deleter';
+  }
+}
+
+/** Test seam: the model as built, so a test can probe it with tuples of its own. */
+export function rebacInternalsForTest(scenario: Scenario, requirements: readonly string[]) {
+  return { tuples: buildTuples(scenario, requirements), rewrites: buildRewrites(requirements) };
+}
+
+/** Test seam: run one check against an arbitrary tuple set. */
+export function checkForTest(
+  tuples: Tuple[],
+  rewrites: Record<string, Rewrite[]>,
+  user: string,
+  relation: string,
+  object: string,
+): boolean {
+  return check(tuples, rewrites, user, relation, object, [], []);
 }
 
 /** Expose the tuples and the walked path so the graph diagram can be drawn. */

@@ -6,7 +6,7 @@ import { expectedDecision } from './oracle';
 import { cedarEngine } from '../engines/cedar';
 import { casbinEngine } from '../engines/casbin';
 import { regoEngine } from '../engines/rego';
-import { rebacEngine } from '../engines/rebac';
+import { checkForTest, rebacEngine, rebacInternalsForTest } from '../engines/rebac';
 
 const ALL = [cedarEngine, regoEngine, casbinEngine, rebacEngine];
 /** Engines that can express request context. These must agree with each other exactly. */
@@ -105,6 +105,59 @@ describe('every engine matches an independent reading of the requirements', () =
   }
 });
 
+describe('every reachable requirement combination', () => {
+  // STEPS is strictly cumulative, so only 4 of the 15 non-empty combinations were ever
+  // exercised: R2 was never tested without R1, R4 never without R3, R3 never alone.
+  // Each engine builder is a set of independent has('Rn') branches, so all 15 are
+  // reachable states of the API, and it was one of the unreached ones that hid the
+  // Casbin empty-policy crash.
+  const ALL_REQUIREMENTS = ['R1', 'R2', 'R3', 'R4'];
+  const combinations: string[][] = [];
+  for (let mask = 1; mask < 1 << ALL_REQUIREMENTS.length; mask++) {
+    combinations.push(ALL_REQUIREMENTS.filter((_, i) => mask & (1 << i)));
+  }
+
+  it(`covers all ${combinations.length} combinations`, () => {
+    expect(combinations).toHaveLength(15);
+  });
+
+  for (const engine of ALL) {
+    it(`${engine.meta.name} matches the oracle in every combination`, async () => {
+      const wrong: string[] = [];
+
+      for (const requirements of combinations) {
+        const ev = await engine.prepare(DEFAULT_SCENARIO, requirements);
+        const rebacCannotExpressR3 = engine.meta.id === 'rebac' && requirements.includes('R3');
+
+        for (const req of enumerateRequests(DEFAULT_SCENARIO)) {
+          const res = await ev.decide(req);
+          if (res.error) {
+            wrong.push(`[${requirements.join('+')}] ${formatRequest(req)}: ${res.error}`);
+            continue;
+          }
+          const expected = expectedDecision(DEFAULT_SCENARIO, requirements, req);
+          if (res.decision === expected) continue;
+
+          const outsideHours = req.context.hour < 9 || req.context.hour >= 18;
+          const isTheKnownLimit =
+            rebacCannotExpressR3 &&
+            req.action === 'edit' &&
+            outsideHours &&
+            res.decision === 'allow' &&
+            expected === 'deny';
+          if (!isTheKnownLimit) {
+            wrong.push(
+              `[${requirements.join('+')}] ${formatRequest(req)}: expected ${expected}, got ${res.decision}`,
+            );
+          }
+        }
+      }
+
+      expect(wrong.slice(0, 10)).toEqual([]);
+    });
+  }
+});
+
 describe('detecting structural limits', () => {
   it('through stage 2 every engine agrees, ReBAC included', async () => {
     const report = await runDifferential(ALL, DEFAULT_SCENARIO, step(2));
@@ -167,6 +220,28 @@ describe('every engine can evaluate', () => {
       }
     });
   }
+});
+
+describe('ReBAC honours the type restrictions its model declares', () => {
+  it('a public wildcard only grants the relation the model opens to it', async () => {
+    // OpenFGA scopes `user:*` per relation: it grants viewer because the model says
+    // `viewer: [user, user:*]`, and must not grant owner, which is declared `[user]`.
+    const { tuples, rewrites } = rebacInternalsForTest(DEFAULT_SCENARIO, step(4));
+    const wildcardOnOwner = [
+      ...tuples,
+      { user: 'user:*', relation: 'owner', object: 'document:design-doc' },
+    ];
+
+    expect(
+      checkForTest(wildcardOnOwner, rewrites, 'user:mallory', 'owner', 'document:design-doc'),
+      'a stray wildcard on owner must not make everyone the owner',
+    ).toBe(false);
+
+    // The declared one still works: postmortem is public, so anyone may view it.
+    expect(checkForTest(tuples, rewrites, 'user:mallory', 'viewer', 'document:postmortem')).toBe(
+      true,
+    );
+  });
 });
 
 describe('the harness reports failure instead of hiding it', () => {
