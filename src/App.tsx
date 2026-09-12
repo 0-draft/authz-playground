@@ -36,8 +36,17 @@ const SCENARIO = DEFAULT_SCENARIO;
 const MAP_HOURS = [8, 9, 17, 18];
 const MAP_REQUESTS = enumerateRequests(SCENARIO, MAP_HOURS, [true]);
 
-/** Hands the event loop back so a long sweep cannot freeze the page. */
-const yieldToBrowser = () => new Promise((resolve) => setTimeout(resolve, 0));
+/**
+ * Hands the event loop back so a long sweep cannot freeze the page.
+ *
+ * scheduler.yield resumes at the head of the queue where it exists, so the sweep keeps
+ * its priority instead of going to the back behind every pending timer.
+ */
+const yieldToBrowser = (): Promise<void> => {
+  const scheduler = (globalThis as { scheduler?: { yield?: () => Promise<void> } }).scheduler;
+  if (typeof scheduler?.yield === 'function') return scheduler.yield();
+  return new Promise((resolve) => setTimeout(resolve, 0));
+};
 
 /**
  * Rego only joins once its wasm module has loaded. This returns a new array each
@@ -63,7 +72,19 @@ async function evaluateRow(
 ): Promise<Decision[]> {
   const ev = await engine.prepare(SCENARIO, requirements);
   const row: Decision[] = [];
-  for (const req of MAP_REQUESTS) row.push((await ev.decide(req)).decision);
+  let sinceYield = performance.now();
+
+  for (const req of MAP_REQUESTS) {
+    row.push((await ev.decide(req)).decision);
+    // The three JS engines settle each decision in a microtask, so a plain loop never
+    // returns to the event loop. That is free when a decision costs microseconds and
+    // ruinous for Rego, where each one is a wasm evaluation: 72 back to back measured
+    // as a single 185 ms task. Yielding on elapsed time costs the fast engines nothing.
+    if (performance.now() - sinceYield > 4) {
+      await yieldToBrowser();
+      sinceYield = performance.now();
+    }
+  }
   return row;
 }
 
