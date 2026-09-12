@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ACTIONS,
   DEFAULT_SCENARIO,
@@ -29,8 +29,14 @@ import {
 const ALL_ENGINES: PolicyEngine[] = [cedarEngine, regoEngine, casbinEngine, rebacEngine];
 const SCENARIO = DEFAULT_SCENARIO;
 // mfa affects none of the requirements, so it is pinned to one value rather than
-// doubling the number of columns in the map for nothing.
-const MAP_REQUESTS = enumerateRequests(SCENARIO, [3, 10, 14, 22], [true]);
+// doubling the number of columns in the map for nothing. The hours are the two edges
+// of the business-hours window and the hour on each side of them, so the grid shows
+// the decision actually flipping rather than sampling the middle of the day twice.
+const MAP_HOURS = [8, 9, 17, 18];
+const MAP_REQUESTS = enumerateRequests(SCENARIO, MAP_HOURS, [true]);
+
+/** Hands the event loop back so a long sweep cannot freeze the page. */
+const yieldToBrowser = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 /**
  * Rego only joins once its wasm module has loaded. This returns a new array each
@@ -49,15 +55,31 @@ interface StepOutcome {
   breaks: Record<string, number>;
 }
 
-async function evaluateStep(
-  engines: PolicyEngine[],
+/** One engine's decisions for one stage. Kept separate so Rego can be merged in later. */
+async function evaluateRow(
+  engine: PolicyEngine,
   requirements: readonly string[],
-): Promise<StepOutcome> {
+): Promise<Decision[]> {
+  const ev = await engine.prepare(SCENARIO, requirements);
+  const row: Decision[] = [];
+  for (const req of MAP_REQUESTS) row.push((await ev.decide(req)).decision);
+  return row;
+}
+
+/**
+ * Derive the comparison for one stage, or null while any engine's row is still
+ * missing. Returning null matters: treating "not computed yet" as "no disagreement"
+ * would make the page claim every engine agrees before it has evaluated anything.
+ */
+function deriveOutcome(
+  rows: Record<string, Decision[]>,
+  stepId: number,
+  engines: PolicyEngine[],
+): StepOutcome | null {
   const decisions: Record<string, Decision[]> = {};
   for (const engine of engines) {
-    const ev = await engine.prepare(SCENARIO, requirements);
-    const row: Decision[] = [];
-    for (const req of MAP_REQUESTS) row.push((await ev.decide(req)).decision);
+    const row = rows[`${stepId}:${engine.meta.id}`];
+    if (!row) return null;
     decisions[engine.meta.id] = row;
   }
 
@@ -80,12 +102,24 @@ async function evaluateStep(
   return { decisions, clash, breaks };
 }
 
+const rowKey = (stepId: number, engineId: string) => `${stepId}:${engineId}`;
+
 export default function App() {
   const [lang, setLang] = useState<Lang>(readStoredLang);
   const [stepId, setStepId] = useState(3);
   const [regoReady, setRegoReady] = useState(false);
-  const [outcomes, setOutcomes] = useState<Record<number, StepOutcome> | null>(null);
-  const [live, setLive] = useState<Record<string, EngineResult>>({});
+  const [rows, setRows] = useState<Record<string, Decision[]>>({});
+  const [failures, setFailures] = useState<Record<string, string>>({});
+  // Verdicts are stored with the request they answer. Rendering compares that key
+  // against the current request, so a result for a request the user has moved away
+  // from is ignored instead of being shown as the answer to the new one.
+  const [liveState, setLiveState] = useState<{
+    key: string;
+    results: Record<string, EngineResult>;
+  }>({ key: '', results: {} });
+  // Rows already computed. Held in a ref so the sweep can skip them without making
+  // itself a dependency of the effect that fills it.
+  const computed = useRef<Set<string>>(new Set());
   const [req, setReq] = useState<AccessRequest>({
     subject: 'alice',
     action: 'edit',
@@ -97,6 +131,15 @@ export default function App() {
   const engines = enginesFor(regoReady);
   const step = STEPS.find((s) => s.id === stepId)!;
   const requirements = step.requirements;
+  const liveKey = [
+    stepId,
+    regoReady,
+    req.subject,
+    req.action,
+    req.resource,
+    req.context.hour,
+    req.context.mfa,
+  ].join('|');
 
   useEffect(() => {
     document.documentElement.lang = lang;
@@ -110,20 +153,42 @@ export default function App() {
     let alive = true;
     ensureRegoLoaded()
       .then(() => alive && setRegoReady(true))
-      .catch((e) => console.error('rego wasm:', e));
+      .catch((e: unknown) => {
+        if (!alive) return;
+        setFailures((f) => ({ ...f, rego: e instanceof Error ? e.message : String(e) }));
+      });
     return () => {
       alive = false;
     };
   }, []);
 
-  // Evaluate every stage up front, so the stage rail can show which engine broke where.
+  // Fill in every stage so the stage rail can show which engine broke where.
+  //
+  // One engine and one stage at a time, yielding between each: the whole sweep is
+  // ~1150 synchronous evaluations, and running it as a single uninterrupted chain
+  // froze the page for most of a second the moment the Rego module arrived. Rows are
+  // also kept per engine, so Rego joining adds its own rows instead of recomputing
+  // the three engines that were already done.
   useEffect(() => {
     let alive = true;
     (async () => {
-      const acc: Record<number, StepOutcome> = {};
-      const list = enginesFor(regoReady);
-      for (const s of STEPS) acc[s.id] = await evaluateStep(list, s.requirements);
-      if (alive) setOutcomes(acc);
+      for (const step of STEPS) {
+        for (const engine of enginesFor(regoReady)) {
+          const key = rowKey(step.id, engine.meta.id);
+          if (computed.current.has(key)) continue;
+          try {
+            const row = await evaluateRow(engine, step.requirements);
+            if (!alive) return;
+            computed.current.add(key);
+            setRows((prev) => ({ ...prev, [key]: row }));
+          } catch (e: unknown) {
+            if (!alive) return;
+            const message = e instanceof Error ? e.message : String(e);
+            setFailures((f) => ({ ...f, [engine.meta.id]: message }));
+          }
+          await yieldToBrowser();
+        }
+      }
     })();
     return () => {
       alive = false;
@@ -137,17 +202,27 @@ export default function App() {
     (async () => {
       const next: Record<string, EngineResult> = {};
       for (const engine of enginesFor(regoReady)) {
-        const ev = await engine.prepare(SCENARIO, requirements);
-        next[engine.meta.id] = await ev.decide(req);
+        try {
+          const ev = await engine.prepare(SCENARIO, requirements);
+          next[engine.meta.id] = await ev.decide(req);
+        } catch (e: unknown) {
+          const message = e instanceof Error ? e.message : String(e);
+          next[engine.meta.id] = {
+            decision: 'deny',
+            reason: { en: 'The engine failed to run', ja: 'エンジンの実行に失敗した' },
+            error: message,
+          };
+        }
       }
-      if (alive) setLive(next);
+      if (alive) setLiveState({ key: liveKey, results: next });
     })();
     return () => {
       alive = false;
     };
-  }, [regoReady, requirements, req]);
+  }, [regoReady, requirements, req, liveKey]);
 
-  const outcome = outcomes?.[stepId];
+  const live = liveState.key === liveKey ? liveState.results : {};
+  const outcome = deriveOutcome(rows, stepId, engines);
   const selectedIndex = MAP_REQUESTS.findIndex(
     (r) =>
       r.subject === req.subject &&
@@ -158,7 +233,8 @@ export default function App() {
 
   const liveDecisions = engines.map((e) => live[e.meta.id]?.decision).filter(Boolean);
   const liveClash = new Set(liveDecisions).size > 1;
-  const clashCount = outcome?.clash.filter(Boolean).length ?? 0;
+  // null means "still evaluating", which must not render as "everything agrees".
+  const clashCount = outcome ? outcome.clash.filter(Boolean).length : null;
 
   const rebac = explainRebac(SCENARIO, requirements, req);
   const projections = engines.map((e) => ({
@@ -192,11 +268,22 @@ export default function App() {
           <p>{t(UI.intro)}</p>
         </header>
 
-        {!regoReady && <p className="loadbar">{t(UI.regoLoading)}</p>}
+        {!regoReady && !failures.rego && <p className="loadbar">{t(UI.regoLoading)}</p>}
+
+        {Object.entries(failures).length > 0 && (
+          <p className="failbar" role="alert">
+            {t(UI.engineFailed)}
+            {Object.entries(failures).map(([id, message]) => (
+              <span key={id}>
+                {ALL_ENGINES.find((e) => e.meta.id === id)?.meta.name ?? id}: {message}
+              </span>
+            ))}
+          </p>
+        )}
 
         <nav className="stages" aria-label={t(UI.stagesLabel)}>
           {STEPS.map((s) => {
-            const o = outcomes?.[s.id];
+            const o = deriveOutcome(rows, s.id, engines);
             const broken = o ? Object.entries(o.breaks).filter(([, n]) => n > 0) : [];
             return (
               <button
@@ -282,8 +369,10 @@ export default function App() {
             </span>
           </div>
 
-          <p className={`tally${clashCount === 0 ? ' clean' : ''}`}>
-            {clashCount === 0 ? (
+          <p className={`tally${clashCount === 0 ? ' clean' : ''}`} aria-live="polite">
+            {clashCount === null ? (
+              t(UI.evaluating)
+            ) : clashCount === 0 ? (
               fill(t(UI.tallyClean), MAP_REQUESTS.length)
             ) : (
               <>

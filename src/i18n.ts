@@ -61,6 +61,10 @@ export const UI = {
     en: 'Loading the OPA Rego compiler (a ~8 MB gzipped WebAssembly module). It joins the comparison as soon as it arrives.',
     ja: 'OPA の Rego コンパイラ (gzip 約 8MB の WebAssembly) を読み込んでいる。完了次第、比較対象に追加される。',
   },
+  engineFailed: {
+    en: 'An engine could not be loaded, so it is missing from the comparison below.',
+    ja: 'エンジンを読み込めなかったため、以下の比較から欠落している。',
+  },
   langLabel: { en: 'Language', ja: '言語' },
   stagesLabel: { en: 'Stages', ja: 'ステージ' },
   stageOf: { en: 'Stage %1 of %2', ja: 'ステージ %1 / %2' },

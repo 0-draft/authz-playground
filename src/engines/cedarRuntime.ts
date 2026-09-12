@@ -11,7 +11,17 @@ let loading: Promise<void> | null = null;
 
 export async function ensureCedarLoaded(): Promise<void> {
   if (typeof initCedar !== 'function') return; // nodejs build: already initialized
-  if (!loading) loading = initCedar().then(() => undefined);
+  // Caching the promise avoids a second fetch, but caching a *rejected* one would
+  // make the first failure permanent: every later call would replay the same error
+  // and no retry could ever succeed. Drop it on failure so a retry re-initializes.
+  if (!loading) {
+    loading = initCedar()
+      .then(() => undefined)
+      .catch((err: unknown) => {
+        loading = null;
+        throw err;
+      });
+  }
   return loading;
 }
 

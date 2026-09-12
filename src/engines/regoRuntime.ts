@@ -40,7 +40,8 @@ export async function ensureRegoLoaded(baseUrl = import.meta.env?.BASE_URL ?? '.
   if (isRegoLoaded()) return;
   if (loading) return loading;
 
-  loading = (async () => {
+  // As with Cedar: a cached rejection would make the first failure permanent.
+  const attempt = (async () => {
     if (typeof document === 'undefined') {
       throw new Error('outside a browser the caller must preload the rego wasm module');
     }
@@ -60,6 +61,11 @@ export async function ensureRegoLoaded(baseUrl = import.meta.env?.BASE_URL ?? '.
     }
     if (!isRegoLoaded()) throw new Error('the rego wasm module failed to initialize');
   })();
+
+  loading = attempt.catch((err: unknown) => {
+    loading = null;
+    throw err;
+  });
 
   return loading;
 }
