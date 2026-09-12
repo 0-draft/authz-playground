@@ -44,11 +44,32 @@ jobs:
       - run: npm run typecheck
 
       # The differential harness is the project's core claim: engines that should
-      # agree must agree, and the one that cannot express a rule must be the only
-      # one that diverges. A failure here means the comparison is no longer honest.
+      # agree must agree, the one that cannot express a rule must be the only one
+      # that diverges, and every engine must match an independent reading of the
+      # requirements. A failure here means the comparison is no longer honest.
       - run: npm test
 
       - run: npm run build
+
+      # Vite copies public/ opportunistically, so a missing wasm module produces a
+      # successful build and a site that quietly drops to three engines.
+      - name: Check the site actually contains the Rego engine
+        run: |
+          test -s dist/rego.wasm || { echo "::error::dist/rego.wasm is missing"; exit 1; }
+          test -s dist/wasm_exec.js || { echo "::error::dist/wasm_exec.js is missing"; exit 1; }
+          size=$(wc -c < dist/rego.wasm)
+          if [ "$size" -lt 20000000 ]; then
+            echo "::error::dist/rego.wasm is only ${size} bytes; expected roughly 40MB"
+            exit 1
+          fi
+
+      - name: Keep the built site for the deploy job
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-artifact@v5
+        with:
+          name: site
+          path: dist
+          retention-days: 1
 
   gofmt:
     runs-on: ubuntu-latest
@@ -74,3 +95,36 @@ jobs:
           GOOS: js
           GOARCH: wasm
         run: go vet ./...
+
+  # Deploying from the same workflow is what keeps this ordered. As two workflows on
+  # the same push they raced, so a commit that broke the differential harness shipped
+  # to production while CI went red beside it.
+  deploy:
+    needs: [verify, gofmt]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    # Let a running deployment finish rather than cancelling it mid-publish.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: site
+          path: dist
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
