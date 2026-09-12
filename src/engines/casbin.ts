@@ -87,8 +87,8 @@ const SUPPORT: Record<string, RequirementSupport> = {
   R3: {
     level: 'awkward',
     note: {
-      en: 'In this projection the hour is appended to the request tuple and tested inside the matcher, so the per-action branch lands in the same expression and readability degrades quickly. Casbin can instead move a condition into the policy row with eval(), keeping the matcher fixed, though node-casbin has open defects around eval().',
-      ja: 'この射影では hour を request タプルに追加し matcher 式の中で判定するため、action ごとの分岐も同じ式に入り可読性が急速に低下する。Casbin には条件をポリシー行側へ移して matcher を固定できる eval() もあるが、node-casbin では eval() に未解決の不具合がある。',
+      en: 'In this projection the hour is appended to the request tuple and tested inside the matcher, so the per-action branch lands in the same expression and readability degrades quickly. Casbin can instead move the condition into the policy row with eval() and leave the matcher fixed, which is the better shape once the conditions outnumber the rules.',
+      ja: 'この射影では hour を request タプルに追加し matcher 式の中で判定するため、action ごとの分岐も同じ式に入り可読性が急速に低下する。Casbin には条件をポリシー行側へ移して matcher を固定できる eval() もあり、条件の数がルールの数を上回る段階ではそちらのほうが適している。',
     },
   },
   R4: {
@@ -119,7 +119,7 @@ export const casbinEngine: PolicyEngine = {
       ja: 'モデル定義とポリシー表を matcher 式で評価する方式',
     },
     year: 2017,
-    origin: 'Apache Casbin (incubating) / Yang Luo',
+    origin: 'Yang Luo / Apache Casbin (incubating since 2026)',
     tagline: {
       en: 'A general engine whose access model is swapped out by configuration. RBAC or ABAC, depending on the matcher.',
       ja: 'モデルを設定ファイルで差し替える汎用エンジン。RBAC にも ABAC にも matcher 次第で対応する。',

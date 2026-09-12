@@ -97,6 +97,10 @@ export const UI = {
     en: 'Every engine reaches the same answer on all %1 requests at this stage.',
     ja: 'このステージでは %1 通りすべてで全エンジンの判定が一致した。',
   },
+  tallyCleanPartial: {
+    en: '%1 of %2 engines have loaded, and they agree on all %3 requests.',
+    ja: '%2 エンジン中 %1 が読み込み済みで、それらは %3 通りすべてで判定が一致している。',
+  },
   tallyClash: {
     en: 'of %1 requests get different answers.',
     ja: '/ %1 通りで判定が分かれた。',

@@ -15,6 +15,7 @@ import { casbinEngine } from './engines/casbin';
 import { explainRebac, rebacEngine } from './engines/rebac';
 import { ensureRegoLoaded } from './engines/regoRuntime';
 import { RebacGraph } from './components/RebacGraph';
+import { tallyState } from './core/tally';
 import {
   LANGS,
   LANG_LABEL,
@@ -240,6 +241,7 @@ export default function App() {
   const liveClash = new Set(liveDecisions).size > 1;
   // null means "still evaluating", which must not render as "everything agrees".
   const clashCount = outcome ? outcome.clash.filter(Boolean).length : null;
+  const tally = tallyState(clashCount, engines.length, ALL_ENGINES.length);
 
   const rebac = explainRebac(SCENARIO, requirements, req);
   const projections = engines.map((e) => ({
@@ -460,10 +462,17 @@ export default function App() {
               </span>
             </div>
 
-            <p className={`tally${clashCount === 0 ? ' clean' : ''}`} aria-live="polite">
-              {clashCount === null ? (
+            <p className={`tally${tally === 'agree' ? ' clean' : ''}`} aria-live="polite">
+              {tally === 'evaluating' ? (
                 t(UI.evaluating)
-              ) : clashCount === 0 ? (
+              ) : tally === 'agree-partial' ? (
+                fill(
+                  t(UI.tallyCleanPartial),
+                  engines.length,
+                  ALL_ENGINES.length,
+                  MAP_REQUESTS.length,
+                )
+              ) : tally === 'agree' ? (
                 fill(t(UI.tallyClean), MAP_REQUESTS.length)
               ) : (
                 <>
