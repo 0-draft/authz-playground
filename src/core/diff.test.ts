@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { runDifferential } from './diff';
 import { DEFAULT_SCENARIO, STEPS, enumerateRequests } from './scenario';
+import type { PolicyEngine } from './engine';
 import { cedarEngine } from '../engines/cedar';
 import { casbinEngine } from '../engines/casbin';
 import { regoEngine } from '../engines/rego';
@@ -20,11 +21,48 @@ describe('fidelity of the projections', () => {
     it(`stage ${s.id} (${s.title.en}): the three context-capable engines agree exactly`, async () => {
       const report = await runDifferential(CONTEXT_CAPABLE, DEFAULT_SCENARIO, s.requirements);
       expect(report.totalRequests).toBeGreaterThan(0);
+      expect(report.errors).toEqual({});
       expect(report.divergences.map((d) => `${d.label} ${JSON.stringify(d.decisions)}`)).toEqual(
         [],
       );
     });
   }
+});
+
+describe('the business-hours boundary', () => {
+  // Agreement between engines is not enough to pin R3 down. Unless both edges of the
+  // window are actually evaluated, a projection can encode 08:00-19:00 instead of
+  // 09:00-18:00 and still agree with the others on every sampled request. These tests
+  // state the window directly, so a wrong edge fails here rather than passing silently.
+  const OWNER = 'alice';
+  const DOC = 'design-doc';
+
+  for (const engine of CONTEXT_CAPABLE) {
+    it(`${engine.meta.name} allows editing exactly within 09:00-17:59`, async () => {
+      const ev = await engine.prepare(DEFAULT_SCENARIO, step(3));
+      const at = async (hour: number) =>
+        (
+          await ev.decide({
+            subject: OWNER,
+            action: 'edit',
+            resource: DOC,
+            context: { hour, mfa: true },
+          })
+        ).decision;
+
+      expect(await at(8), 'the hour before opening must be denied').toBe('deny');
+      expect(await at(9), 'the opening hour must be allowed').toBe('allow');
+      expect(await at(17), 'the last hour of the window must be allowed').toBe('allow');
+      expect(await at(18), 'the closing hour must be denied').toBe('deny');
+    });
+  }
+
+  it('the enumeration actually samples both edges', async () => {
+    // Guards the guard: if BOUNDARY_HOURS ever loses an edge, the tests above still
+    // pass but the differential sweep goes blind again.
+    const hours = new Set(enumerateRequests(DEFAULT_SCENARIO).map((r) => r.context.hour));
+    for (const h of [8, 9, 17, 18]) expect(hours.has(h), `hour ${h} must be sampled`).toBe(true);
+  });
 });
 
 describe('detecting structural limits', () => {
@@ -89,6 +127,42 @@ describe('every engine can evaluate', () => {
       }
     });
   }
+});
+
+describe('the harness reports failure instead of hiding it', () => {
+  it('every engine projects a requirement set that grants nothing', async () => {
+    // R3 on its own only restricts; it grants no access. Casbin used to throw here
+    // because node-casbin rejects an empty policy document, which made one engine
+    // unprojectable for an input the other three handle by denying everything.
+    for (const engine of ALL) {
+      const ev = await engine.prepare(DEFAULT_SCENARIO, ['R3']);
+      const res = await ev.decide({
+        subject: 'alice',
+        action: 'edit',
+        resource: 'design-doc',
+        context: { hour: 10, mfa: true },
+      });
+      expect(res.error, `${engine.meta.id}: ${res.error}`).toBeUndefined();
+      expect(res.decision, `${engine.meta.id} should grant nothing`).toBe('deny');
+    }
+  });
+
+  it('a failing engine is recorded rather than passed off as a denier', async () => {
+    // A broken engine answers deny for everything, and deny is the correct answer for
+    // most requests, so without this it would look like a well-behaved participant.
+    const broken: PolicyEngine = {
+      meta: { ...rebacEngine.meta, id: 'broken', name: 'Broken' },
+      project: rebacEngine.project,
+      prepare: async () => {
+        throw new Error('projection unavailable');
+      },
+    };
+
+    const report = await runDifferential([cedarEngine, broken], DEFAULT_SCENARIO, step(4));
+
+    expect(report.errors.broken).toContain('prepare failed: projection unavailable');
+    expect(report.totalRequests).toBeGreaterThan(0); // the run completed rather than aborting
+  });
 });
 
 describe('the requirements are actually met', () => {

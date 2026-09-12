@@ -138,11 +138,21 @@ export const DEFAULT_SCENARIO: Scenario = {
   },
 };
 
+/**
+ * Hours sampled by default.
+ *
+ * Both edges of the business-hours window R3 declares must appear, together with
+ * the hour on each side of them. Sampling only the middle of the day and the
+ * middle of the night lets a projection encode the wrong window — 08:00-19:00,
+ * say — while still agreeing with every other engine on every sampled request.
+ */
+export const BOUNDARY_HOURS = [0, 8, 9, 10, 17, 18, 22, 23] as const;
+
 /** Enumerate every request the scenario can produce. This feeds the differential test. */
 export function enumerateRequests(
   scenario: Scenario,
-  hours: number[] = [3, 10, 14, 22],
-  mfaValues: boolean[] = [true, false],
+  hours: readonly number[] = BOUNDARY_HOURS,
+  mfaValues: readonly boolean[] = [true, false],
 ): AccessRequest[] {
   const out: AccessRequest[] = [];
   for (const subject of scenario.users) {

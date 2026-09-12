@@ -58,6 +58,12 @@ function buildPolicy(scenario: Scenario, requirements: readonly string[]): strin
     }
   }
 
+  // node-casbin rejects an empty policy document outright ("policy document cannot
+  // be false-y"), so a requirement set that grants nothing would make this the only
+  // engine that cannot be projected at all. The other three simply deny everything.
+  // An unmatchable row keeps the projection valid and changes no decision.
+  if (rows.length === 0) rows.push('p, __none__, __none__, __none__');
+
   return rows.join('\n');
 }
 

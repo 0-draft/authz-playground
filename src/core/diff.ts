@@ -6,7 +6,7 @@
 //   (b) a genuine semantic difference between engines -> the teaching material itself
 // Having this harness is what lets the project claim the comparison is fair.
 import type { Decision } from './scenario';
-import type { PolicyEngine } from './engine';
+import type { Evaluator, PolicyEngine } from './engine';
 import type { AccessRequest, Scenario } from './scenario';
 import { enumerateRequests, formatRequest } from './scenario';
 
@@ -25,6 +25,28 @@ export interface DiffReport {
   divergences: Divergence[];
   /** Number of disagreements for each pair of engines. */
   disagreementPairs: { a: string; b: string; count: number }[];
+  /**
+   * Engine id -> the distinct failures it reported.
+   *
+   * An engine that fails on every request still answers deny, and deny happens to be
+   * the correct answer for most requests, so a broken engine otherwise reads as a
+   * well-behaved participant with few divergences. Failures are surfaced here so that
+   * "no divergences" cannot be confused with "never ran".
+   */
+  errors: Record<string, string[]>;
+}
+
+/** Stands in for an engine whose prepare() threw, so one failure cannot abort the run. */
+function brokenEvaluator(message: string): Evaluator {
+  return {
+    async decide() {
+      return {
+        decision: 'deny' as const,
+        reason: { en: 'The engine failed to prepare', ja: 'エンジンの準備に失敗した' },
+        error: message,
+      };
+    },
+  };
 }
 
 export async function runDifferential(
@@ -33,8 +55,22 @@ export async function runDifferential(
   requirements: readonly string[],
   requests: AccessRequest[] = enumerateRequests(scenario),
 ): Promise<DiffReport> {
+  const errors: Record<string, string[]> = {};
+  const noteError = (id: string, message: string) => {
+    const seen = (errors[id] ??= []);
+    if (!seen.includes(message)) seen.push(message);
+  };
+
   const evaluators = await Promise.all(
-    engines.map(async (e) => ({ id: e.meta.id, ev: await e.prepare(scenario, requirements) })),
+    engines.map(async (e) => {
+      try {
+        return { id: e.meta.id, ev: await e.prepare(scenario, requirements) };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        noteError(e.meta.id, `prepare failed: ${message}`);
+        return { id: e.meta.id, ev: brokenEvaluator(message) };
+      }
+    }),
   );
 
   const divergences: Divergence[] = [];
@@ -43,7 +79,14 @@ export async function runDifferential(
   for (const request of requests) {
     const decisions: Record<string, Decision> = {};
     for (const { id, ev } of evaluators) {
-      decisions[id] = (await ev.decide(request)).decision;
+      try {
+        const result = await ev.decide(request);
+        if (result.error) noteError(id, result.error);
+        decisions[id] = result.decision;
+      } catch (err) {
+        noteError(id, err instanceof Error ? err.message : String(err));
+        decisions[id] = 'deny';
+      }
     }
 
     const values = new Set(Object.values(decisions));
@@ -77,5 +120,6 @@ export async function runDifferential(
     totalRequests: requests.length,
     divergences,
     disagreementPairs,
+    errors,
   };
 }
