@@ -245,6 +245,12 @@ body {
   z-index: 2;
   background: var(--recess);
   padding-right: 4px;
+  /* The plate has to cover the full row height, or cell colour shows above and below it
+     as the grid scrolls underneath on a narrow screen. */
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
 }
 
 .map-cells {

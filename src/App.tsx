@@ -142,13 +142,21 @@ export default function App() {
   // The grid holds 288 buttons. Exactly one is in the tab order at a time and the
   // arrow keys move between them, so reaching the controls below no longer costs
   // 288 presses of Tab.
-  const [cursor, setCursor] = useState(0);
+  // Held as (engine, column) rather than a flat row*columns index: the engine list grows
+  // from three to four when Rego's module lands, and a flat index silently re-pointed at
+  // a different engine mid-session.
+  const [cursor, setCursor] = useState<{ engineId: string; col: number }>({
+    engineId: ALL_ENGINES[0].meta.id,
+    col: 0,
+  });
   const gridRef = useRef<HTMLDivElement>(null);
   const [req, setReq] = useState<AccessRequest>({
     subject: 'alice',
     action: 'edit',
     resource: 'design-doc',
-    context: { hour: 3, mfa: true },
+    // Must be an hour the grid actually plots, or the page names a selected request that
+    // no cell reflects. 08:00 is outside business hours, which is the interesting side.
+    context: { hour: MAP_HOURS[0], mfa: true },
   });
 
   const t = (l: { en: string; ja: string }) => l[lang];
@@ -354,10 +362,9 @@ export default function App() {
             <p className="map-readout">
               <span className="cursor-part">
                 {(() => {
-                  const r = MAP_REQUESTS[cursor % MAP_REQUESTS.length];
-                  const engine = engines[Math.floor(cursor / MAP_REQUESTS.length)] ?? engines[0];
-                  const d =
-                    outcome?.decisions[engine?.meta.id ?? '']?.[cursor % MAP_REQUESTS.length];
+                  const r = MAP_REQUESTS[cursor.col];
+                  const engine = engines.find((x) => x.meta.id === cursor.engineId) ?? engines[0];
+                  const d = outcome?.decisions[engine?.meta.id ?? '']?.[cursor.col];
                   return (
                     <>
                       {engine?.meta.name} <span className="muted">·</span> {formatRequest(r)}{' '}
@@ -390,26 +397,34 @@ export default function App() {
                 ref={gridRef}
                 onKeyDown={(e) => {
                   const cols = MAP_REQUESTS.length;
-                  const rows = engines.length;
-                  const col = cursor % cols;
-                  const row = Math.floor(cursor / cols);
+                  const row = Math.max(
+                    0,
+                    engines.findIndex((x) => x.meta.id === cursor.engineId),
+                  );
                   const move = (r: number, c: number) => {
                     e.preventDefault();
-                    const next = r * cols + c;
-                    setCursor(next);
+                    const engineId = engines[r].meta.id;
+                    setCursor({ engineId, col: c });
                     gridRef.current
-                      ?.querySelectorAll<HTMLButtonElement>('button.cell')
-                      [next]?.focus();
+                      ?.querySelector<HTMLButtonElement>(
+                        `button.cell[data-engine="${engineId}"][data-col="${c}"]`,
+                      )
+                      ?.focus();
                   };
-                  if (e.key === 'ArrowRight') move(row, Math.min(cols - 1, col + 1));
-                  else if (e.key === 'ArrowLeft') move(row, Math.max(0, col - 1));
-                  else if (e.key === 'ArrowDown') move(Math.min(rows - 1, row + 1), col);
-                  else if (e.key === 'ArrowUp') move(Math.max(0, row - 1), col);
+                  if (e.key === 'ArrowRight') move(row, Math.min(cols - 1, cursor.col + 1));
+                  else if (e.key === 'ArrowLeft') move(row, Math.max(0, cursor.col - 1));
+                  else if (e.key === 'ArrowDown')
+                    move(Math.min(engines.length - 1, row + 1), cursor.col);
+                  else if (e.key === 'ArrowUp') move(Math.max(0, row - 1), cursor.col);
                   else if (e.key === 'Home') move(row, 0);
                   else if (e.key === 'End') move(row, cols - 1);
                 }}
+                // Selecting a request selects its whole column, so four cells carry
+                // aria-selected at once. Say so, rather than leaving a single-select
+                // grid reporting four selections.
+                aria-multiselectable="true"
               >
-                {engines.map((engine, rowIndex) => (
+                {engines.map((engine) => (
                   <div className="map-row" role="row" key={engine.meta.id}>
                     <span className="map-label" role="rowheader">
                       {engine.meta.name}
@@ -423,7 +438,6 @@ export default function App() {
                       {MAP_REQUESTS.map((r, i) => {
                         const d = outcome?.decisions[engine.meta.id]?.[i];
                         const clash = outcome?.clash[i] ?? false;
-                        const flat = rowIndex * MAP_REQUESTS.length + i;
                         // The engine name lives in a row header that assistive tech does
                         // not read per cell, and disagreement was carried only by colour,
                         // so both go into the name.
@@ -443,11 +457,19 @@ export default function App() {
                             data-d={d}
                             data-clash={clash}
                             data-sel={i === selectedIndex}
-                            tabIndex={flat === cursor ? 0 : -1}
+                            data-engine={engine.meta.id}
+                            data-col={i}
+                            tabIndex={
+                              engine.meta.id === cursor.engineId && i === cursor.col ? 0 : -1
+                            }
                             aria-selected={i === selectedIndex}
                             title={label}
                             aria-label={label}
-                            onFocus={() => setCursor(flat)}
+                            onFocus={() => setCursor({ engineId: engine.meta.id, col: i })}
+                            // The readout was described as the hover position but only
+                            // moved on focus, so a mouse user had to click a cell to learn
+                            // what it was — and clicking changes the selection.
+                            onMouseEnter={() => setCursor({ engineId: engine.meta.id, col: i })}
                             onClick={() => setReq(r)}
                           />
                         );
