@@ -12,7 +12,7 @@ export interface Tuple {
   object: string;
 }
 
-type Rewrite =
+export type Rewrite =
   /**
    * Holds if a direct tuple exists. `wildcard` mirrors OpenFGA's type restrictions:
    * `user:*` only grants the relation when the model declares `[user, user:*]`, so a
@@ -75,7 +75,11 @@ function buildDsl(requirements: readonly string[], lang: Lang): string {
 
   const lines = ['model', '  schema 1.1', '', 'type user', ''];
   if (has('R2')) lines.push('type folder', '  relations', '    define admin: [user]', '');
-  lines.push('type document', '  relations');
+  // A `relations` header with nothing under it is not valid, and R3 alone produces
+  // exactly that: it restricts without granting anything.
+  const documentRelations = has('R1') || has('R2') || editorParts.length > 0 || has('R4');
+  lines.push('type document');
+  if (documentRelations) lines.push('  relations');
   if (has('R1')) lines.push('    define owner: [user]');
   if (has('R2')) lines.push('    define parent: [folder]');
   if (editorParts.length) lines.push(`    define editor: ${editorParts.join(' or ')}`);
@@ -97,7 +101,7 @@ function buildDsl(requirements: readonly string[], lang: Lang): string {
   return lines.join('\n');
 }
 
-const MAX_DEPTH = 10;
+export const MAX_DEPTH = 10;
 
 function objectType(object: string): string {
   return object.split(':')[0];
@@ -117,13 +121,16 @@ function check(
   trace: string[],
   path: Tuple[],
   depth = 0,
+  abort: { hit: boolean } = { hit: false },
 ): boolean {
   const indent = '  '.repeat(depth);
   trace.push(`${indent}check(${user}, ${relation}, ${object})`);
   if (depth > MAX_DEPTH) {
-    // Unreachable in this model, whose deepest path is two hops. Marked rather than
-    // returned as a plain deny so a cycle could never be mistaken for "not permitted".
+    // Unreachable in this model, whose deepest path is two hops. Recorded rather than
+    // returned as a plain deny so a cycle could never be mistaken for "not permitted":
+    // the caller turns this into a reported error instead of a decision.
     trace.push(`${indent}  aborted: exceeded ${MAX_DEPTH} levels of rewrite`);
+    abort.hit = true;
     return false;
   }
 
@@ -143,13 +150,26 @@ function check(
       }
     } else if (rule.kind === 'computed') {
       trace.push(`${indent}  ${relation} delegates to ${rule.relation}`);
-      if (check(tuples, rewrites, user, rule.relation, object, trace, path, depth + 1)) return true;
+      if (check(tuples, rewrites, user, rule.relation, object, trace, path, depth + 1, abort))
+        return true;
     } else {
       // tuple-to-userset: follow the object's tupleset and re-check there.
       const parents = tuples.filter((t) => t.object === object && t.relation === rule.tupleset);
       for (const p of parents) {
         trace.push(`${indent}  follow ${rule.tupleset} to ${p.user}`);
-        if (check(tuples, rewrites, user, rule.computedRelation, p.user, trace, path, depth + 1)) {
+        if (
+          check(
+            tuples,
+            rewrites,
+            user,
+            rule.computedRelation,
+            p.user,
+            trace,
+            path,
+            depth + 1,
+            abort,
+          )
+        ) {
           path.push(p);
           return true;
         }
@@ -188,8 +208,11 @@ export function checkForTest(
   user: string,
   relation: string,
   object: string,
-): boolean {
-  return check(tuples, rewrites, user, relation, object, [], []);
+): { ok: boolean; aborted: boolean; trace: string[] } {
+  const trace: string[] = [];
+  const abort = { hit: false };
+  const ok = check(tuples, rewrites, user, relation, object, trace, [], 0, abort);
+  return { ok, aborted: abort.hit, trace };
 }
 
 /** Expose the tuples and the walked path so the graph diagram can be drawn. */
@@ -297,6 +320,7 @@ export const rebacEngine: PolicyEngine = {
         // action maps to a relation. There is no parameter for context, so hour is dropped.
         const relation = actionToRelation(req.action);
         const trace: string[] = [];
+        const abort = { hit: false };
         const ok = check(
           tuples,
           rewrites,
@@ -305,7 +329,17 @@ export const rebacEngine: PolicyEngine = {
           `document:${req.resource}`,
           trace,
           [],
+          0,
+          abort,
         );
+        if (abort.hit) {
+          return {
+            decision: 'deny' as const,
+            reason: { en: 'Graph search aborted', ja: 'グラフ探索が打ち切られた' },
+            detail: trace,
+            error: `rewrite depth exceeded ${MAX_DEPTH}`,
+          };
+        }
         return ok
           ? allow(
               {

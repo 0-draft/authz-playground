@@ -6,7 +6,8 @@ import { expectedDecision } from './oracle';
 import { cedarEngine } from '../engines/cedar';
 import { casbinEngine } from '../engines/casbin';
 import { regoEngine } from '../engines/rego';
-import { checkForTest, rebacEngine, rebacInternalsForTest } from '../engines/rebac';
+import { MAX_DEPTH, checkForTest, rebacEngine, rebacInternalsForTest } from '../engines/rebac';
+import type { Rewrite, Tuple } from '../engines/rebac';
 
 const ALL = [cedarEngine, regoEngine, casbinEngine, rebacEngine];
 /** Engines that can express request context. These must agree with each other exactly. */
@@ -117,8 +118,18 @@ describe('every reachable requirement combination', () => {
     combinations.push(ALL_REQUIREMENTS.filter((_, i) => mask & (1 << i)));
   }
 
-  it(`covers all ${combinations.length} combinations`, () => {
-    expect(combinations).toHaveLength(15);
+  it('reaches combinations the cumulative stages never produce', () => {
+    // The point of the sweep is the combinations STEPS cannot reach, so assert that
+    // rather than that the bitmask loop above counted correctly.
+    const asKey = (r: readonly string[]) => [...r].sort().join('+');
+    const fromSteps = new Set(STEPS.map((s) => asKey(s.requirements)));
+    const unreachedBySteps = combinations.filter((c) => !fromSteps.has(asKey(c)));
+
+    expect(fromSteps.size).toBe(4);
+    expect(unreachedBySteps.map(asKey)).toContain('R2'); // R2 without R1
+    expect(unreachedBySteps.map(asKey)).toContain('R3'); // R3 alone: grants nothing
+    expect(unreachedBySteps.map(asKey)).toContain('R4'); // R4 without R3
+    expect(unreachedBySteps).toHaveLength(11);
   });
 
   for (const engine of ALL) {
@@ -161,12 +172,14 @@ describe('every reachable requirement combination', () => {
 describe('detecting structural limits', () => {
   it('through stage 2 every engine agrees, ReBAC included', async () => {
     const report = await runDifferential(ALL, DEFAULT_SCENARIO, step(2));
+    expect(report.errors).toEqual({});
     expect(report.divergences).toEqual([]);
   });
 
   it('at stage 3 only ReBAC diverges, because it has no concept of context', async () => {
     const report = await runDifferential(ALL, DEFAULT_SCENARIO, step(3));
 
+    expect(report.errors).toEqual({});
     expect(report.divergences.length).toBeGreaterThan(0);
     // In every divergence, ReBAC is alone on the allow side.
     for (const d of report.divergences) {
@@ -177,6 +190,9 @@ describe('detecting structural limits', () => {
 
   it('the only divergences are edits outside business hours', async () => {
     const report = await runDifferential(ALL, DEFAULT_SCENARIO, step(3));
+    expect(report.errors).toEqual({});
+    // Iterating an empty list would pass vacuously.
+    expect(report.divergences.length).toBeGreaterThan(0);
     for (const d of report.divergences) {
       expect(d.request.action).toBe('edit');
       const h = d.request.context.hour;
@@ -191,7 +207,10 @@ describe('detecting structural limits', () => {
     const s3 = await runDifferential(ALL, DEFAULT_SCENARIO, step(3));
     const s4 = await runDifferential(ALL, DEFAULT_SCENARIO, step(4));
 
+    expect(s3.errors).toEqual({});
+    expect(s4.errors).toEqual({});
     expect(s4.divergences.length).toBe(s3.divergences.length);
+    expect(s4.divergences.length).toBeGreaterThan(0);
     for (const d of s4.divergences) {
       expect(d.request.action).toBe('edit');
       expect(d.allowed).toEqual(['rebac']);
@@ -204,6 +223,8 @@ describe('detecting structural limits', () => {
 
     // The declared metadata and the measured behaviour must not contradict each other.
     const report = await runDifferential(ALL, DEFAULT_SCENARIO, step(3));
+    expect(report.errors).toEqual({});
+    expect(report.disagreementPairs.length).toBeGreaterThan(0);
     expect(report.disagreementPairs.every((p) => p.a === 'rebac' || p.b === 'rebac')).toBe(true);
   });
 });
@@ -233,14 +254,38 @@ describe('ReBAC honours the type restrictions its model declares', () => {
     ];
 
     expect(
-      checkForTest(wildcardOnOwner, rewrites, 'user:mallory', 'owner', 'document:design-doc'),
+      checkForTest(wildcardOnOwner, rewrites, 'user:mallory', 'owner', 'document:design-doc').ok,
       'a stray wildcard on owner must not make everyone the owner',
     ).toBe(false);
 
     // The declared one still works: postmortem is public, so anyone may view it.
-    expect(checkForTest(tuples, rewrites, 'user:mallory', 'viewer', 'document:postmortem')).toBe(
+    expect(checkForTest(tuples, rewrites, 'user:mallory', 'viewer', 'document:postmortem').ok).toBe(
       true,
     );
+  });
+});
+
+describe('a cycle is reported, not answered', () => {
+  it('a rewrite cycle aborts and says so instead of returning a quiet deny', () => {
+    // Unreachable in the shipped model, whose deepest path is two hops, so the guard
+    // needs a constructed cycle to be exercised at all. Without one, the abort flag
+    // could be deleted with the whole suite still green — which it was.
+    const cyclic: Tuple[] = [
+      { user: 'folder:a', relation: 'parent', object: 'document:x' },
+      { user: 'document:x', relation: 'parent', object: 'folder:a' },
+    ];
+    const rewrites: Record<string, Rewrite[]> = {
+      'document#editor': [
+        { kind: 'tupleToUserset', tupleset: 'parent', computedRelation: 'editor' },
+      ],
+      'folder#editor': [{ kind: 'tupleToUserset', tupleset: 'parent', computedRelation: 'editor' }],
+    };
+
+    const result = checkForTest(cyclic, rewrites, 'user:nobody', 'editor', 'document:x');
+
+    expect(result.ok).toBe(false);
+    expect(result.aborted, 'the abort must be reported, not folded into the deny').toBe(true);
+    expect(result.trace.join('\n')).toContain(`exceeded ${MAX_DEPTH}`);
   });
 });
 
