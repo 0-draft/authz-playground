@@ -431,6 +431,10 @@ export default function App() {
                     </span>
                     <div
                       className="map-cells"
+                      // Exists only to carry the grid-template style. Without a
+                      // presentation role it sits between role="row" and the gridcells
+                      // as a generic node, which is not a child a row is allowed to own.
+                      role="presentation"
                       style={{
                         gridTemplateColumns: `repeat(${MAP_REQUESTS.length}, minmax(0, 1fr))`,
                       }}

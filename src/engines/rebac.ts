@@ -268,6 +268,57 @@ const SUPPORT: Record<string, RequirementSupport> = {
   },
 };
 
+/**
+ * Builds the evaluator for a model. Exported so a test can drive the real decide() with
+ * a model the shipped scenario cannot produce — a cycle, for instance. Reaching past
+ * decide() into check() would leave this wiring unasserted, which is how the depth
+ * abort stayed deletable after it was supposedly fixed.
+ */
+export function makeEvaluator(tuples: Tuple[], rewrites: Record<string, Rewrite[]>): Evaluator {
+  return {
+    async decide(req: AccessRequest) {
+      // action maps to a relation. There is no parameter for context, so hour is dropped.
+      const relation = actionToRelation(req.action);
+      const trace: string[] = [];
+      const abort = { hit: false };
+      const ok = check(
+        tuples,
+        rewrites,
+        `user:${req.subject}`,
+        relation,
+        `document:${req.resource}`,
+        trace,
+        [],
+        0,
+        abort,
+      );
+      if (abort.hit) {
+        return {
+          decision: 'deny' as const,
+          reason: { en: 'Graph search aborted', ja: 'グラフ探索が打ち切られた' },
+          detail: trace,
+          error: `rewrite depth exceeded ${MAX_DEPTH}`,
+        };
+      }
+      return ok
+        ? allow(
+            {
+              en: `Graph search reached ${relation}`,
+              ja: `グラフ探索により ${relation} に到達した`,
+            },
+            trace,
+          )
+        : deny(
+            {
+              en: `Graph search could not reach ${relation}`,
+              ja: `グラフ探索では ${relation} に到達できなかった`,
+            },
+            trace,
+          );
+    },
+  };
+}
+
 export const rebacEngine: PolicyEngine = {
   meta: {
     id: 'rebac',
@@ -312,50 +363,6 @@ export const rebacEngine: PolicyEngine = {
   },
 
   async prepare(scenario: Scenario, requirements: readonly string[]): Promise<Evaluator> {
-    const tuples = buildTuples(scenario, requirements);
-    const rewrites = buildRewrites(requirements);
-
-    return {
-      async decide(req: AccessRequest) {
-        // action maps to a relation. There is no parameter for context, so hour is dropped.
-        const relation = actionToRelation(req.action);
-        const trace: string[] = [];
-        const abort = { hit: false };
-        const ok = check(
-          tuples,
-          rewrites,
-          `user:${req.subject}`,
-          relation,
-          `document:${req.resource}`,
-          trace,
-          [],
-          0,
-          abort,
-        );
-        if (abort.hit) {
-          return {
-            decision: 'deny' as const,
-            reason: { en: 'Graph search aborted', ja: 'グラフ探索が打ち切られた' },
-            detail: trace,
-            error: `rewrite depth exceeded ${MAX_DEPTH}`,
-          };
-        }
-        return ok
-          ? allow(
-              {
-                en: `Graph search reached ${relation}`,
-                ja: `グラフ探索により ${relation} に到達した`,
-              },
-              trace,
-            )
-          : deny(
-              {
-                en: `Graph search could not reach ${relation}`,
-                ja: `グラフ探索では ${relation} に到達できなかった`,
-              },
-              trace,
-            );
-      },
-    };
+    return makeEvaluator(buildTuples(scenario, requirements), buildRewrites(requirements));
   },
 };

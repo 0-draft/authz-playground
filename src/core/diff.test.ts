@@ -6,7 +6,13 @@ import { expectedDecision } from './oracle';
 import { cedarEngine } from '../engines/cedar';
 import { casbinEngine } from '../engines/casbin';
 import { regoEngine } from '../engines/rego';
-import { MAX_DEPTH, checkForTest, rebacEngine, rebacInternalsForTest } from '../engines/rebac';
+import {
+  MAX_DEPTH,
+  checkForTest,
+  makeEvaluator,
+  rebacEngine,
+  rebacInternalsForTest,
+} from '../engines/rebac';
 import type { Rewrite, Tuple } from '../engines/rebac';
 
 const ALL = [cedarEngine, regoEngine, casbinEngine, rebacEngine];
@@ -286,6 +292,81 @@ describe('a cycle is reported, not answered', () => {
     expect(result.ok).toBe(false);
     expect(result.aborted, 'the abort must be reported, not folded into the deny').toBe(true);
     expect(result.trace.join('\n')).toContain(`exceeded ${MAX_DEPTH}`);
+  });
+
+  it('the abort reaches a decision as an error, not as an ordinary deny', async () => {
+    // The test above proves the flag is set and readable through the check() seam. It
+    // says nothing about whether decide() turns that into a reported error, which was
+    // the actual finding: a cycle being mistaken by the harness for "not permitted".
+    // Deleting the abort branch in decide() left the suite green.
+    const cyclic: Tuple[] = [
+      { user: 'folder:a', relation: 'parent', object: 'document:x' },
+      { user: 'document:x', relation: 'parent', object: 'folder:a' },
+    ];
+    const rewrites: Record<string, Rewrite[]> = {
+      'document#editor': [
+        { kind: 'tupleToUserset', tupleset: 'parent', computedRelation: 'editor' },
+      ],
+      'folder#editor': [{ kind: 'tupleToUserset', tupleset: 'parent', computedRelation: 'editor' }],
+    };
+
+    const res = await makeEvaluator(cyclic, rewrites).decide({
+      subject: 'nobody',
+      action: 'edit',
+      resource: 'x',
+      context: { hour: 10, mfa: true },
+    });
+
+    expect(res.decision).toBe('deny');
+    expect(res.error, 'a depth abort must surface as an error').toContain('rewrite depth exceeded');
+  });
+
+  it('a depth abort is recorded by the harness rather than counted as a decision', async () => {
+    const cyclicEngine: PolicyEngine = {
+      meta: { ...rebacEngine.meta, id: 'cyclic', name: 'Cyclic' },
+      project: rebacEngine.project,
+      prepare: async () =>
+        makeEvaluator(
+          [
+            { user: 'folder:a', relation: 'parent', object: 'document:design-doc' },
+            { user: 'document:design-doc', relation: 'parent', object: 'folder:a' },
+          ],
+          {
+            'document#editor': [
+              { kind: 'tupleToUserset', tupleset: 'parent', computedRelation: 'editor' },
+            ],
+            'folder#editor': [
+              { kind: 'tupleToUserset', tupleset: 'parent', computedRelation: 'editor' },
+            ],
+          },
+        ),
+    };
+
+    const report = await runDifferential([cedarEngine, cyclicEngine], DEFAULT_SCENARIO, step(4));
+    expect(report.errors.cyclic?.[0]).toContain('rewrite depth exceeded');
+  });
+});
+
+describe('the ReBAC projection source says what the model can hold', () => {
+  it('never emits a relations header with no relations under it', () => {
+    // R3 restricts without granting anything, so the document type has no relations.
+    // Nothing asserted anything about buildDsl output at all, so the guard against this
+    // was deletable with the whole suite green.
+    const dsl = rebacEngine.project(DEFAULT_SCENARIO, ['R3'], 'en').sources[0].code;
+    const lines = dsl.split('\n');
+    const header = lines.findIndex((l) => l.trim() === 'relations');
+
+    if (header !== -1) {
+      const next = lines[header + 1] ?? '';
+      expect(next.trim().startsWith('define'), `bare relations header:\n${dsl}`).toBe(true);
+    }
+    expect(dsl).toContain('type document');
+  });
+
+  it('declares a relation once a requirement grants one', () => {
+    const dsl = rebacEngine.project(DEFAULT_SCENARIO, ['R1'], 'en').sources[0].code;
+    expect(dsl).toContain('  relations');
+    expect(dsl).toContain('define owner: [user]');
   });
 });
 
