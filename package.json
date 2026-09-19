@@ -15,7 +15,7 @@
     "build:wasm": "cd wasm/rego && GOOS=js GOARCH=wasm go build -ldflags='-s -w' -o ../../public/rego.wasm . && cp \"$(go env GOROOT)/lib/wasm/wasm_exec.js\" ../../public/wasm_exec.js"
   },
   "dependencies": {
-    "@cedar-policy/cedar-wasm": "^4.12.0",
+    "@cedar-policy/cedar-wasm": "^4.13.0",
     "buffer": "^6.0.3",
     "casbin": "^5.51.1",
     "react": "^19.2.0",
