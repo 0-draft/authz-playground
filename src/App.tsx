@@ -65,17 +65,25 @@ async function evaluateRow(
   return decideAll(await engine.prepare(SCENARIO, requirements));
 }
 
+/**
+ * An evaluator that fails reports deny with an error. For an edited policy that must
+ * stop the run, or a policy that does not compile would pass as one denying everything.
+ */
+const failOnError = (ev: Evaluator): Evaluator => ({
+  async decide(req) {
+    const result = await ev.decide(req);
+    if (result.error) throw new Error(result.error);
+    return result;
+  },
+});
+
 /** Every request in the map, in MAP_REQUESTS order. */
 async function decideAll(ev: Evaluator): Promise<Decision[]> {
   const row: Decision[] = [];
   let sinceYield = performance.now();
 
   for (const req of MAP_REQUESTS) {
-    const result = await ev.decide(req);
-    // An evaluator that fails reports deny with an error. Counting that as a decision
-    // would let a policy that does not compile pass as one that denies everything.
-    if (result.error) throw new Error(result.error);
-    row.push(result.decision);
+    row.push((await ev.decide(req)).decision);
     // The three JS engines settle each decision in a microtask, so a plain loop never
     // returns to the event loop. That is free when a decision costs microseconds and
     // ruinous for Rego, where each one is a wasm evaluation: 72 back to back measured
@@ -788,7 +796,7 @@ export default function App() {
                 initial={buildPolicy(requirements, lang)}
                 requests={MAP_REQUESTS}
                 shipped={regoReady ? rows[rowKey(stepId, 'rego')] : undefined}
-                evaluate={(policy) => decideAll(regoEvaluator(SCENARIO, policy))}
+                evaluate={(policy) => decideAll(failOnError(regoEvaluator(SCENARIO, policy)))}
               />
             </section>
           )}
