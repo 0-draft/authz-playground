@@ -8,13 +8,14 @@ import {
   formatRequest,
 } from './core/scenario';
 import type { AccessRequest, Decision } from './core/scenario';
-import type { EngineResult, PolicyEngine } from './core/engine';
+import type { EngineResult, Evaluator, PolicyEngine } from './core/engine';
 import { cedarEngine } from './engines/cedar';
-import { regoEngine } from './engines/rego';
+import { buildPolicy, regoEngine, regoEvaluator } from './engines/rego';
 import { casbinEngine } from './engines/casbin';
 import { explainRebac, rebacEngine } from './engines/rebac';
 import { ensureRegoLoaded } from './engines/regoRuntime';
 import { RebacGraph } from './components/RebacGraph';
+import { RegoEditor } from './components/RegoEditor';
 import { tallyState } from './core/tally';
 import { LANGS, LANG_LABEL, UI, fill, readStoredLang, storeLang, type Lang } from './i18n';
 
@@ -61,12 +62,20 @@ async function evaluateRow(
   engine: PolicyEngine,
   requirements: readonly string[],
 ): Promise<Decision[]> {
-  const ev = await engine.prepare(SCENARIO, requirements);
+  return decideAll(await engine.prepare(SCENARIO, requirements));
+}
+
+/** Every request in the map, in MAP_REQUESTS order. */
+async function decideAll(ev: Evaluator): Promise<Decision[]> {
   const row: Decision[] = [];
   let sinceYield = performance.now();
 
   for (const req of MAP_REQUESTS) {
-    row.push((await ev.decide(req)).decision);
+    const result = await ev.decide(req);
+    // An evaluator that fails reports deny with an error. Counting that as a decision
+    // would let a policy that does not compile pass as one that denies everything.
+    if (result.error) throw new Error(result.error);
+    row.push(result.decision);
     // The three JS engines settle each decision in a microtask, so a plain loop never
     // returns to the event loop. That is free when a decision costs microseconds and
     // ruinous for Rego, where each one is a wasm evaluation: 72 back to back measured
@@ -762,6 +771,22 @@ export default function App() {
                 </article>
               ))}
             </div>
+          </section>
+
+          <section className="section">
+            <h2>{t(UI.editHeading)}</h2>
+            <p className="lede">{t(UI.editLede)}</p>
+            <RegoEditor
+              // Remount on a new stage or language, so the editor starts from that
+              // stage's policy instead of carrying an edit across to rules it was not
+              // written against.
+              key={`${stepId}:${lang}`}
+              lang={lang}
+              initial={buildPolicy(requirements, lang)}
+              requests={MAP_REQUESTS}
+              shipped={regoReady ? rows[rowKey(stepId, 'rego')] : undefined}
+              evaluate={(policy) => decideAll(regoEvaluator(SCENARIO, policy))}
+            />
           </section>
         </main>
 

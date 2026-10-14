@@ -19,6 +19,8 @@ Requirements are then added one at a time:
 
 At stage 3 the ReBAC model stops agreeing with the others. This is not a bug in the comparison: `check(user, relation, object)` has three arguments and none of them can carry a time of day. OpenFGA added Conditions years later to close exactly this gap.
 
+The Rego policy can also be edited on the page. OPA compiles each edit, runs it against every request in the map, and lists the requests whose decision changed from the shipped policy.
+
 ## Why the comparison can be trusted
 
 "Send the same request to four engines" is not well defined, because the engines do not share an input model. Cedar takes a fixed `(principal, action, resource, context)` tuple, Rego takes arbitrary JSON, Casbin takes a variable-length tuple matched by an expression, and Zanzibar takes `(user, relation, object)`, with no place in the model for an attribute condition.
