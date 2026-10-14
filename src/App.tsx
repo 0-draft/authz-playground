@@ -773,21 +773,25 @@ export default function App() {
             </div>
           </section>
 
-          <section className="section">
-            <h2>{t(UI.editHeading)}</h2>
-            <p className="lede">{t(UI.editLede)}</p>
-            <RegoEditor
-              // Remount on a new stage, so an edit is not carried across to rules it was
-              // not written against. A language switch only changes the comments, so the
-              // editor keeps the edit and swaps in the translated text only if untouched.
-              key={stepId}
-              lang={lang}
-              initial={buildPolicy(requirements, lang)}
-              requests={MAP_REQUESTS}
-              shipped={regoReady ? rows[rowKey(stepId, 'rego')] : undefined}
-              evaluate={(policy) => decideAll(regoEvaluator(SCENARIO, policy))}
-            />
-          </section>
+          {/* Without the OPA module there is nothing to edit against; the failure bar
+              already says why, so the section is left out rather than waiting forever. */}
+          {!failures.rego && (
+            <section className="section">
+              <h2>{t(UI.editHeading)}</h2>
+              <p className="lede">{t(UI.editLede)}</p>
+              <RegoEditor
+                // Remount on a new stage, so an edit is not carried across to rules it was
+                // not written against. A language switch only changes the comments, so the
+                // editor keeps the edit and swaps in the translated text only if untouched.
+                key={stepId}
+                lang={lang}
+                initial={buildPolicy(requirements, lang)}
+                requests={MAP_REQUESTS}
+                shipped={regoReady ? rows[rowKey(stepId, 'rego')] : undefined}
+                evaluate={(policy) => decideAll(regoEvaluator(SCENARIO, policy))}
+              />
+            </section>
+          )}
         </main>
 
         <footer className="foot">
