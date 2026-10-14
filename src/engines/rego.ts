@@ -16,7 +16,7 @@ const COMMENTS: Record<string, L> = {
   },
 };
 
-function buildPolicy(requirements: readonly string[], lang: Lang): string {
+export function buildPolicy(requirements: readonly string[], lang: Lang): string {
   const has = (r: string) => requirements.includes(r);
   const parts: string[] = ['package authz', '', 'default allow := false'];
 
@@ -137,37 +137,40 @@ export const regoEngine: PolicyEngine = {
 
   async prepare(scenario: Scenario, requirements: readonly string[]): Promise<Evaluator> {
     await ensureRegoLoaded();
-    const policy = buildPolicy(requirements, 'en');
-
-    return {
-      async decide(req: AccessRequest) {
-        const res = evalRego(
-          policy,
-          'data.authz.allow',
-          {
-            subject: req.subject,
-            action: req.action,
-            resource: req.resource,
-            context: req.context,
-          },
-          { documents: scenario.documents, folders: scenario.folders },
-          false,
-        );
-
-        if (!res.ok) {
-          return {
-            decision: 'deny' as const,
-            reason: { en: 'Rego evaluation failed', ja: 'Rego の評価に失敗した' },
-            error: res.error,
-          };
-        }
-        return res.value === true
-          ? allow({ en: 'An allow rule matched', ja: 'いずれかの allow ルールが成立した' })
-          : deny({
-              en: 'No allow rule matched, so default allow := false stands',
-              ja: 'いずれの allow ルールも成立せず、default allow := false が適用された',
-            });
-      },
-    };
+    return regoEvaluator(scenario, buildPolicy(requirements, 'en'));
   },
 };
+
+/** Evaluate an arbitrary policy against the scenario. The module must already be loaded. */
+export function regoEvaluator(scenario: Scenario, policy: string): Evaluator {
+  return {
+    async decide(req: AccessRequest) {
+      const res = evalRego(
+        policy,
+        'data.authz.allow',
+        {
+          subject: req.subject,
+          action: req.action,
+          resource: req.resource,
+          context: req.context,
+        },
+        { documents: scenario.documents, folders: scenario.folders },
+        false,
+      );
+
+      if (!res.ok) {
+        return {
+          decision: 'deny' as const,
+          reason: { en: 'Rego evaluation failed', ja: 'Rego の評価に失敗した' },
+          error: res.error,
+        };
+      }
+      return res.value === true
+        ? allow({ en: 'An allow rule matched', ja: 'いずれかの allow ルールが成立した' })
+        : deny({
+            en: 'No allow rule matched, so default allow := false stands',
+            ja: 'いずれの allow ルールも成立せず、default allow := false が適用された',
+          });
+    },
+  };
+}

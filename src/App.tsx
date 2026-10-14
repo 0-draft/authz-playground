@@ -8,13 +8,14 @@ import {
   formatRequest,
 } from './core/scenario';
 import type { AccessRequest, Decision } from './core/scenario';
-import type { EngineResult, PolicyEngine } from './core/engine';
+import type { EngineResult, Evaluator, PolicyEngine } from './core/engine';
 import { cedarEngine } from './engines/cedar';
-import { regoEngine } from './engines/rego';
+import { buildPolicy, regoEngine, regoEvaluator } from './engines/rego';
 import { casbinEngine } from './engines/casbin';
 import { explainRebac, rebacEngine } from './engines/rebac';
 import { ensureRegoLoaded } from './engines/regoRuntime';
 import { RebacGraph } from './components/RebacGraph';
+import { RegoEditor } from './components/RegoEditor';
 import { tallyState } from './core/tally';
 import { LANGS, LANG_LABEL, UI, fill, readStoredLang, storeLang, type Lang } from './i18n';
 
@@ -61,7 +62,23 @@ async function evaluateRow(
   engine: PolicyEngine,
   requirements: readonly string[],
 ): Promise<Decision[]> {
-  const ev = await engine.prepare(SCENARIO, requirements);
+  return decideAll(await engine.prepare(SCENARIO, requirements));
+}
+
+/**
+ * An evaluator that fails reports deny with an error. For an edited policy that must
+ * stop the run, or a policy that does not compile would pass as one denying everything.
+ */
+const failOnError = (ev: Evaluator): Evaluator => ({
+  async decide(req) {
+    const result = await ev.decide(req);
+    if (result.error) throw new Error(result.error);
+    return result;
+  },
+});
+
+/** Every request in the map, in MAP_REQUESTS order. */
+async function decideAll(ev: Evaluator): Promise<Decision[]> {
   const row: Decision[] = [];
   let sinceYield = performance.now();
 
@@ -763,6 +780,26 @@ export default function App() {
               ))}
             </div>
           </section>
+
+          {/* Without the OPA module there is nothing to edit against; the failure bar
+              already says why, so the section is left out rather than waiting forever. */}
+          {!failures.rego && (
+            <section className="section">
+              <h2>{t(UI.editHeading)}</h2>
+              <p className="lede">{t(UI.editLede)}</p>
+              <RegoEditor
+                // Remount on a new stage, so an edit is not carried across to rules it was
+                // not written against. A language switch only changes the comments, so the
+                // editor keeps the edit and swaps in the translated text only if untouched.
+                key={stepId}
+                lang={lang}
+                initial={buildPolicy(requirements, lang)}
+                requests={MAP_REQUESTS}
+                shipped={regoReady ? rows[rowKey(stepId, 'rego')] : undefined}
+                evaluate={(policy) => decideAll(failOnError(regoEvaluator(SCENARIO, policy)))}
+              />
+            </section>
+          )}
         </main>
 
         <footer className="foot">

@@ -138,6 +138,28 @@ export const UI = {
   emptyAtStage: { en: '(empty at this stage)', ja: '(このステージでは空)' },
   lineCount: { en: '%1 lines', ja: '%1 行' },
 
+  editHeading: { en: 'Edit the Rego policy', ja: 'Rego ポリシーを編集する' },
+  editLede: {
+    en: 'This is the policy above, compiled and evaluated by OPA in your browser. Change it and every request in the map is evaluated again, against the policy shipped for this stage.',
+    ja: '上の policy.rego を OPA がブラウザ上でコンパイルして評価する。書き換えると、マップの全リクエストを評価し直し、このステージの元のポリシーと判定を比べる。',
+  },
+  editLabel: { en: 'policy.rego (editable)', ja: 'policy.rego (編集可)' },
+  editReset: { en: 'Reset', ja: '元に戻す' },
+  editWaiting: {
+    en: 'Waiting for the OPA module to load…',
+    ja: 'OPA モジュールの読み込みを待っている…',
+  },
+  editFailed: { en: 'OPA rejected the policy:', ja: 'OPA がポリシーを受け付けなかった:' },
+  editSame: {
+    en: 'Same decision as the shipped policy on all %1 requests.',
+    ja: '%1 件すべてで元のポリシーと同じ判定になった。',
+  },
+  editDiff: {
+    en: '%1 of %2 requests now get a different decision:',
+    ja: '%2 件中 %1 件で判定が変わった:',
+  },
+  editMore: { en: '…and %1 more', ja: '…ほか %1 件' },
+
   footer: {
     en: 'All four engines run inside your browser: Cedar through its official WebAssembly bindings, Rego by compiling OPA itself to js/wasm, Casbin as its TypeScript implementation, and ReBAC as a teaching reimplementation of the Zanzibar check algorithm. Nothing is sent to a server.',
     ja: '4エンジンはすべてブラウザ内で実行している。Cedar は公式の WebAssembly バインディング、Rego は OPA 本体を js/wasm にビルドしたもの、Casbin は TypeScript 実装、ReBAC は Zanzibar の check アルゴリズムを教材用に再実装したものである。サーバーへの問い合わせは行っていない。',
