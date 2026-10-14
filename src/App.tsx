@@ -777,10 +777,10 @@ export default function App() {
             <h2>{t(UI.editHeading)}</h2>
             <p className="lede">{t(UI.editLede)}</p>
             <RegoEditor
-              // Remount on a new stage or language, so the editor starts from that
-              // stage's policy instead of carrying an edit across to rules it was not
-              // written against.
-              key={`${stepId}:${lang}`}
+              // Remount on a new stage, so an edit is not carried across to rules it was
+              // not written against. A language switch only changes the comments, so the
+              // editor keeps the edit and swaps in the translated text only if untouched.
+              key={stepId}
               lang={lang}
               initial={buildPolicy(requirements, lang)}
               requests={MAP_REQUESTS}

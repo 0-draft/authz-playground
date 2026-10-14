@@ -2,18 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SCENARIO, STEPS, enumerateRequests } from '../core/scenario';
 import { buildPolicy, regoEngine, regoEvaluator } from './rego';
 
-const requirements = STEPS.find((s) => s.id === 4)!.requirements;
-const requests = enumerateRequests(DEFAULT_SCENARIO, [8, 9, 17, 18], [true]);
+const requests = enumerateRequests(DEFAULT_SCENARIO);
 
 describe('the editable Rego policy', () => {
   it('evaluates the shipped text exactly as the engine does', async () => {
     // The editor starts from buildPolicy(…, lang) and compares against the engine's
     // own row. If the two drifted apart, an untouched policy would report changes.
-    const engine = await regoEngine.prepare(DEFAULT_SCENARIO, requirements);
-    for (const lang of ['en', 'ja'] as const) {
-      const edited = regoEvaluator(DEFAULT_SCENARIO, buildPolicy(requirements, lang));
-      for (const req of requests) {
-        expect((await edited.decide(req)).decision).toBe((await engine.decide(req)).decision);
+    for (const step of STEPS) {
+      const engine = await regoEngine.prepare(DEFAULT_SCENARIO, step.requirements);
+      for (const lang of ['en', 'ja'] as const) {
+        const edited = regoEvaluator(DEFAULT_SCENARIO, buildPolicy(step.requirements, lang));
+        for (const req of requests) {
+          expect((await edited.decide(req)).decision).toBe((await engine.decide(req)).decision);
+        }
       }
     }
   });

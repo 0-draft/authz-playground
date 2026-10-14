@@ -28,6 +28,13 @@ interface Props {
  */
 export function RegoEditor({ lang, initial, requests, shipped, evaluate }: Props) {
   const [code, setCode] = useState(initial);
+  const [shown, setShown] = useState(initial);
+  // A new `initial` here means the language changed. Follow it only while the text is
+  // still the policy as shipped, so switching language never discards an edit.
+  if (initial !== shown) {
+    setShown(initial);
+    if (code === shown) setCode(initial);
+  }
   const [run, setRun] = useState<Run | null>(null);
   const ready = shipped !== undefined;
   const t = (l: { en: string; ja: string }) => l[lang];
