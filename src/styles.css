@@ -10,9 +10,9 @@
   --paper-2: #f5f6f7;
   --band: #eaf0f6;
   --ink: #17191d;
-  /* 8.9:1 and 5.6:1 on --paper. */
-  --ink-2: #444a53;
-  --ink-3: #5f6670;
+  /* 10.1:1 and 6.4:1 on --paper. */
+  --ink-2: #3c424a;
+  --ink-3: #59606a;
   --rule: #dfe2e6;
   /* 3.1:1 on --paper, the floor for a line that carries meaning. */
   --rule-2: #8f969f;
@@ -23,8 +23,13 @@
   --blue: #1d5bc6;
   --blue-wash: rgba(29, 91, 198, 0.1);
 
-  --sans: 'Archivo', 'IBM Plex Sans JP', system-ui, -apple-system, sans-serif;
-  --mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  /* Figtree for reading: open apertures and a tall x-height keep small UI text legible.
+     Bricolage Grotesque for display: friendly ink traps that still read at a glance.
+     JetBrains Mono for code and requests: unambiguous 0/O, 1/l/I at small sizes.
+     M PLUS 2 covers Japanese with the same open, slightly rounded feel. */
+  --sans: 'Figtree', 'M PLUS 2', system-ui, -apple-system, sans-serif;
+  --display: 'Bricolage Grotesque', 'Figtree', 'M PLUS 2', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, 'M PLUS 2', monospace;
   --measure: 68ch;
   --gutter: clamp(16px, 4vw, 48px);
   --page: 1180px;
@@ -151,9 +156,9 @@ main,
 }
 
 .wordmark {
+  font-family: var(--display);
   margin: 0;
   font-weight: 700;
-  font-stretch: 112%;
   letter-spacing: -0.01em;
 }
 
@@ -196,12 +201,12 @@ main,
 }
 
 .masthead h1 {
+  font-family: var(--display);
   margin: 0;
-  font-size: clamp(34px, 5.4vw, 66px);
+  font-size: clamp(34px, 5.4vw, 64px);
   font-weight: 700;
-  font-stretch: 78%;
-  line-height: 0.98;
-  letter-spacing: -0.025em;
+  line-height: 1.02;
+  letter-spacing: -0.015em;
   text-wrap: balance;
 }
 
@@ -287,9 +292,9 @@ html:lang(ja) .masthead h1 {
 }
 
 .sb-n {
+  font-family: var(--display);
   font-size: 26px;
   font-weight: 700;
-  font-stretch: 75%;
   line-height: 1;
   padding-top: 1px;
 }
@@ -425,10 +430,10 @@ main {
 }
 
 .block h2 {
+  font-family: var(--display);
   margin: 0 0 10px;
   font-size: clamp(24px, 3vw, 30px);
   font-weight: 700;
-  font-stretch: 85%;
   line-height: 1.15;
   letter-spacing: -0.01em;
 }
@@ -443,10 +448,10 @@ main {
 /* ---------- The question ---------- */
 
 .question {
+  font-family: var(--display);
   margin: 0 0 22px;
   font-size: clamp(22px, 3.2vw, 32px);
   font-weight: 600;
-  font-stretch: 90%;
   line-height: 1.5;
 }
 
@@ -486,7 +491,7 @@ main {
 .caption {
   margin: -8px 0 28px;
   max-width: var(--measure);
-  font-size: 14px;
+  font-size: 14.5px;
   color: var(--ink-3);
 }
 
@@ -757,10 +762,10 @@ main {
 }
 
 .tally b {
+  font-family: var(--display);
   color: var(--red);
   font-size: 1.5em;
   font-weight: 700;
-  font-stretch: 80%;
   margin-right: 2px;
 }
 
