@@ -26,10 +26,11 @@
   /* Figtree for reading: open apertures and a tall x-height keep small UI text legible.
      Bricolage Grotesque for display: friendly ink traps that still read at a glance.
      JetBrains Mono for code and requests: unambiguous 0/O, 1/l/I at small sizes.
-     M PLUS 2 covers Japanese with the same open, slightly rounded feel. */
-  --sans: 'Figtree', 'M PLUS 2', system-ui, -apple-system, sans-serif;
-  --display: 'Bricolage Grotesque', 'Figtree', 'M PLUS 2', system-ui, sans-serif;
-  --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, 'M PLUS 2', monospace;
+     Zen Maru Gothic covers Japanese: rounded terminals that match Figtree's friendliness
+     without losing legibility at body sizes. */
+  --sans: 'Figtree', 'Zen Maru Gothic', system-ui, -apple-system, sans-serif;
+  --display: 'Bricolage Grotesque', 'Figtree', 'Zen Maru Gothic', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, 'Zen Maru Gothic', monospace;
   --measure: 68ch;
   --gutter: clamp(16px, 4vw, 48px);
   --page: 1180px;
