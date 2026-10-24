@@ -1,12 +1,12 @@
 import type { Tuple } from '../engines/rebac';
 
-const VIEW_W = 720;
-const BOX_W = 180;
+const VIEW_W = 780;
+const BOX_W = 172;
 const BOX_H = 32;
 const ROW_H = 54;
 // The middle column sits left of centre: user-to-folder edges are short and straight,
 // while the fan-in to the documents needs room to curve.
-const COL_X = [0, 222, VIEW_W - BOX_W];
+const COL_X = [0, 262, VIEW_W - BOX_W];
 /** Approximate advance of one character of the 11.5px monospace label face. */
 const CHAR_W = 6.9;
 const LINE_H = 13;
@@ -78,7 +78,20 @@ export function RebacGraph({ tuples, path, label, conditionState }: Props) {
     if (c && !gate.has(t.user)) gate.set(t.user, { name: t.condition!, ...c });
   }
 
-  type Edge = { t: Tuple; d: string; lx: number; ly: number; state: 'hit' | 'veto' | 'idle' };
+  type Edge = {
+    t: Tuple;
+    d: string;
+    /** Where to set the label, or null when another edge of the same fan-out carries it. */
+    label: { x: number; y: number } | null;
+    state: 'hit' | 'veto' | 'idle';
+  };
+  // Edges that leave one node under one relation (a folder that is parent of every
+  // document, say) share a single label beside that node. One label per edge piled
+  // them up where the curves converge, on top of each other's lines.
+  const fan = new Map<string, number>();
+  for (const t of tuples)
+    fan.set(`${t.user}|${t.relation}`, (fan.get(`${t.user}|${t.relation}`) ?? 0) + 1);
+  const labelled = new Set<string>();
   const edges: Edge[] = [];
   const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
   // Node boxes and their captions count as occupied, so no label is set on top of one.
@@ -104,23 +117,32 @@ export function RebacGraph({ tuples, path, label, conditionState }: Props) {
       !placed.some(
         (r) => x - w / 2 < r.x1 && x + w / 2 > r.x0 && y - LINE_H + 2 < r.y1 && y + 2 > r.y0,
       );
-    let spot = along(x1, y1, x2, y2, 0.5);
-    for (const tt of [0.5, 0.4, 0.6, 0.3, 0.7]) {
-      const p = along(x1, y1, x2, y2, tt);
-      if (free(p.x, p.y - 4)) {
-        spot = p;
-        break;
+    const group = `${t.user}|${t.relation}`;
+    const shared = (fan.get(group) ?? 1) > 1;
+    let label: Edge['label'] = null;
+    if (!shared || !labelled.has(group)) {
+      labelled.add(group);
+      // A shared label goes just past its source, where the edges have not yet split.
+      let spot = shared ? { x: x1 + 8 + w / 2, y: y1 } : along(x1, y1, x2, y2, 0.5);
+      if (!shared) {
+        for (const tt of [0.5, 0.4, 0.6, 0.3, 0.7]) {
+          const p = along(x1, y1, x2, y2, tt);
+          if (free(p.x, p.y - 4)) {
+            spot = p;
+            break;
+          }
+        }
       }
+      let ly = spot.y - 4;
+      for (let guard = 0; guard < 6 && !free(spot.x, ly); guard++) ly += LINE_H;
+      placed.push({ x0: spot.x - w / 2, x1: spot.x + w / 2, y0: ly - LINE_H + 2, y1: ly + 2 });
+      label = { x: spot.x, y: ly };
     }
-    let ly = spot.y - 4;
-    for (let guard = 0; guard < 6 && !free(spot.x, ly); guard++) ly += LINE_H;
-    placed.push({ x0: spot.x - w / 2, x1: spot.x + w / 2, y0: ly - LINE_H + 2, y1: ly + 2 });
 
     edges.push({
       t,
       d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`,
-      lx: spot.x,
-      ly,
+      label,
       state: hit.has(key(t)) ? 'hit' : g && !g.holds ? 'veto' : 'idle',
     });
   }
@@ -139,11 +161,27 @@ export function RebacGraph({ tuples, path, label, conditionState }: Props) {
       {edges.map((e) => (
         <path key={key(e.t)} className={`r-edge ${e.state}`} d={e.d} />
       ))}
-      {edges.map((e) => (
-        <text key={key(e.t)} className={`r-label ${e.state}`} x={e.lx} y={e.ly} textAnchor="middle">
-          {e.t.relation}
-        </text>
-      ))}
+      {edges.map((e) => {
+        if (!e.label) return null;
+        // A shared label is as strong as the strongest edge it names.
+        const group = edges.filter((o) => o.t.user === e.t.user && o.t.relation === e.t.relation);
+        const state = group.some((o) => o.state === 'hit')
+          ? 'hit'
+          : group.some((o) => o.state === 'veto')
+            ? 'veto'
+            : 'idle';
+        return (
+          <text
+            key={key(e.t)}
+            className={`r-label ${state}`}
+            x={e.label.x}
+            y={e.label.y}
+            textAnchor="middle"
+          >
+            {e.t.relation}
+          </text>
+        );
+      })}
       {[...pos.entries()].map(([ref, p]) => {
         const on = path.some((t) => t.user === ref || t.object === ref);
         const g = gate.get(ref);
