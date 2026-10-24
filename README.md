@@ -38,7 +38,7 @@ The Rego policy can also be edited on the page. OPA compiles each edit, runs it 
 
 ## Why the comparison can be trusted
 
-"Send the same request to four engines" is not well defined, because the engines do not share an input model. Cedar takes a fixed `(principal, action, resource, context)` tuple, Rego takes arbitrary JSON, Casbin takes a variable-length tuple matched by an expression, and Zanzibar takes `(user, relation, object)`, with no place in the model for an attribute condition.
+"Send the same request to every engine" is not well defined, because the engines do not share an input model. Cedar takes a fixed `(principal, action, resource, context)` tuple, Rego takes arbitrary JSON, Casbin takes a variable-length tuple matched by an expression, and Zanzibar takes `(user, relation, object)`, with no place in the model for an attribute condition.
 
 So the projections are the interesting part, and their fidelity is verified mechanically. A differential harness enumerates every request the scenario can produce and runs all of them through every engine. A disagreement has only two possible causes:
 

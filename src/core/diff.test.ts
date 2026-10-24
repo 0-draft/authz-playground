@@ -77,7 +77,7 @@ describe('the business-hours boundary', () => {
 
 describe('every engine matches an independent reading of the requirements', () => {
   // Agreement between engines only proves they made the same choice, not the right one.
-  // A misreading shared by all four — "the owner may also view", say — would be
+  // A misreading shared by every engine — "the owner may also view", say — would be
   // invisible to the differential harness. This checks each engine against a second
   // implementation written from the requirement text alone.
   //
@@ -449,7 +449,7 @@ describe('the harness reports failure instead of hiding it', () => {
   it('every engine projects a requirement set that grants nothing', async () => {
     // R3 on its own only restricts; it grants no access. Casbin used to throw here
     // because node-casbin rejects an empty policy document, which made one engine
-    // unprojectable for an input the other three handle by denying everything.
+    // unprojectable for an input the others handle by denying everything.
     for (const engine of ALL) {
       const ev = await engine.prepare(DEFAULT_SCENARIO, ['R3']);
       const res = await ev.decide({

@@ -44,8 +44,8 @@ export const UI = {
     ja: 'Cedar、OPA / Rego、Casbin、Zanzibar 型の ReBAC に同じ要件を1つずつ与える。3つ目の要件で、古典的な Zanzibar のモデルだけが他と同じことを表現できなくなる。5つ目のエンジンは、その同じモデルに後年 OpenFGA が追加した condition を足したもので、欠落とその解決を並べて見られる。判定はすべてブラウザ内で行っている。',
   },
   regoLoading: {
-    en: 'Loading the OPA compiler, an 8 MB WebAssembly module. Rego joins the comparison when it arrives.',
-    ja: 'OPA コンパイラ (8 MB の WebAssembly) を読み込んでいる。完了すると Rego が比較に加わる。',
+    en: 'Loading the OPA compiler, a WebAssembly module of about 8 MB gzipped (40 MB unpacked). Rego joins the comparison when it arrives.',
+    ja: 'OPA コンパイラ (gzip で約 8 MB、展開後 40 MB の WebAssembly) を読み込んでいる。完了すると Rego が比較に加わる。',
   },
   engineFailed: {
     en: 'An engine could not be loaded and is missing from every comparison below:',

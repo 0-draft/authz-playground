@@ -3,7 +3,7 @@
 // The differential harness proves the engines agree with *each other*. That is not the
 // same as proving them right: a misreading shared by every engine is invisible to it.
 // This function is written straight from the requirement text, without reference to any
-// engine adapter, so it can disagree with all four at once.
+// engine adapter, so it can disagree with all of them at once.
 //
 // It deliberately lives outside src/engines so that it stays a second opinion rather
 // than a fifth projection.
