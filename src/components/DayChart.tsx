@@ -145,7 +145,8 @@ export function DayChart({ lang, engines, results, hour, onHour, showHours }: Pr
           ))}
           {engines.map((e, i) => {
             const day = results[e.id];
-            if (!day) return null;
+            // A failed engine has no trace to draw; its verdict column says so.
+            if (!day || day.some((r) => r.error)) return null;
             const top = i * LANE;
             return (
               <g key={e.id}>

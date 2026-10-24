@@ -14,7 +14,8 @@ export function splitHours(results: Record<string, EngineResult[] | undefined>):
   const out = new Set<number>();
   for (const h of DAY_HOURS) {
     const seen = new Set<string>();
-    for (const day of Object.values(results)) if (day) seen.add(day[h].decision);
+    // An engine that failed answers deny with an error. That is not a vote.
+    for (const day of Object.values(results)) if (day && !day[h].error) seen.add(day[h].decision);
     if (seen.size > 1) out.add(h);
   }
   return out;
@@ -28,7 +29,7 @@ export function minorityAt(
   const allow: string[] = [];
   const deny: string[] = [];
   for (const [id, day] of Object.entries(results)) {
-    if (!day) continue;
+    if (!day || day[h].error) continue;
     (day[h].decision === 'allow' ? allow : deny).push(id);
   }
   if (allow.length === 0 || deny.length === 0 || allow.length === deny.length) return new Set();

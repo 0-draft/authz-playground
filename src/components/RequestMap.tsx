@@ -1,17 +1,9 @@
 import { useRef, useState } from 'react';
 import type { EngineMeta } from '../core/engine';
-import type { AccessRequest, Decision } from '../core/scenario';
+import type { MapOutcome } from '../core/outcome';
+import type { AccessRequest } from '../core/scenario';
 import { ACTIONS, formatRequest } from '../core/scenario';
 import { UI, fill, type Lang } from '../i18n';
-
-export interface MapOutcome {
-  /** engine id -> the decision for each request, in request order */
-  decisions: Record<string, Decision[]>;
-  /** whether the engines disagreed, per request */
-  clash: boolean[];
-  /** the engines in the minority, per request; empty when agreed or evenly split */
-  minority: string[][];
-}
 
 interface Props {
   lang: Lang;

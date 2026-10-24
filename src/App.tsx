@@ -16,7 +16,8 @@ import {
 import { ensureRegoLoaded } from './engines/regoRuntime';
 import { DayChart } from './components/DayChart';
 import { DAY_HOURS, hh, minorityAt, splitHours } from './core/day';
-import { MapKey, RequestMap, type MapOutcome } from './components/RequestMap';
+import { MapKey, RequestMap } from './components/RequestMap';
+import { deriveOutcome, rowKey } from './core/outcome';
 import { RebacGraph } from './components/RebacGraph';
 import { RegoEditor } from './components/RegoEditor';
 import { SourceTabs } from './components/SourceTabs';
@@ -90,56 +91,6 @@ async function decideAll(ev: Evaluator): Promise<Decision[]> {
   return row;
 }
 
-interface StepOutcome extends MapOutcome {
-  /** engine id -> how many times it was in the minority */
-  breaks: Record<string, number>;
-}
-
-/**
- * Derive the comparison for one stage, or null while any engine's row is still
- * missing. Returning null matters: treating "not computed yet" as "no disagreement"
- * would make the page claim every engine agrees before it has evaluated anything.
- */
-function deriveOutcome(
-  rows: Record<string, Decision[]>,
-  stepId: number,
-  engines: PolicyEngine[],
-): StepOutcome | null {
-  const decisions: Record<string, Decision[]> = {};
-  for (const engine of engines) {
-    const row = rows[rowKey(stepId, engine.meta.id)];
-    if (!row) return null;
-    decisions[engine.meta.id] = row;
-  }
-
-  const clash: boolean[] = [];
-  const minority: string[][] = [];
-  const breaks: Record<string, number> = Object.fromEntries(engines.map((e) => [e.meta.id, 0]));
-
-  MAP_REQUESTS.forEach((_, i) => {
-    const votes = engines.map((e) => decisions[e.meta.id][i]);
-    const allows = votes.filter((v) => v === 'allow').length;
-    const denies = votes.length - allows;
-    clash.push(allows > 0 && denies > 0);
-    // An even split has no minority, so nobody is charged a break for it.
-    const odd: string[] = [];
-    if (allows > 0 && denies > 0 && allows !== denies) {
-      const side: Decision = allows < denies ? 'allow' : 'deny';
-      engines.forEach((e, k) => {
-        if (votes[k] === side) {
-          odd.push(e.meta.id);
-          breaks[e.meta.id] += 1;
-        }
-      });
-    }
-    minority.push(odd);
-  });
-
-  return { decisions, clash, minority, breaks };
-}
-
-const rowKey = (stepId: number, engineId: string) => `${stepId}:${engineId}`;
-
 export default function App() {
   const [lang, setLang] = useState<Lang>(readStoredLang);
   const [stepId, setStepId] = useState(3);
@@ -168,6 +119,10 @@ export default function App() {
 
   const t = (l: { en: string; ja: string }) => l[lang];
   const engines = enginesFor(regoReady);
+  // Engines that failed are left out of every comparison. Their rows never arrive, and
+  // waiting on them held the page at "evaluating" indefinitely.
+  const compared = engines.filter((e) => !failures[e.meta.id]);
+  const comparedIds = compared.map((e) => e.meta.id);
   const step = STEPS.find((s) => s.id === stepId)!;
   const requirements = step.requirements;
   const dayKey = [stepId, regoReady, req.subject, req.action, req.resource].join('|');
@@ -219,7 +174,9 @@ export default function App() {
           const key = rowKey(sid, engine.meta.id);
           if (computed.current.has(key)) continue;
           try {
-            const row = await decideAll(await evaluatorFor(engine, sid));
+            // An evaluation error must not be counted as a deny vote, so it stops the
+            // row and is reported as a failure instead.
+            const row = await decideAll(failOnError(await evaluatorFor(engine, sid)));
             if (!alive) return;
             computed.current.add(key);
             setRows((prev) => ({ ...prev, [key]: row }));
@@ -277,7 +234,7 @@ export default function App() {
   const splitNow = split.has(hour);
   const oddNow = minorityAt(results, hour);
 
-  const outcome = deriveOutcome(rows, stepId, engines);
+  const outcome = deriveOutcome(rows, stepId, comparedIds);
   const selectedIndex = MAP_REQUESTS.findIndex(
     (r) =>
       r.subject === req.subject &&
@@ -287,7 +244,7 @@ export default function App() {
   );
   // null means "still evaluating", which must not render as "everything agrees".
   const clashCount = outcome ? outcome.clash.filter(Boolean).length : null;
-  const tally = tallyState(clashCount, engines.length, ALL_ENGINES.length);
+  const tally = tallyState(clashCount, compared.length, ALL_ENGINES.length);
 
   const projections = engines.map((e) => ({
     engine: e.meta,
@@ -366,8 +323,8 @@ export default function App() {
         <ol>
           {STEPS.map((s) => {
             const sum = stageSummary(
-              deriveOutcome(rows, s.id, engines),
-              engines.length,
+              deriveOutcome(rows, s.id, comparedIds),
+              compared.length,
               ALL_ENGINES.length,
             );
             const split = sum.state === 'disagree';
@@ -512,7 +469,12 @@ export default function App() {
             {tally === 'evaluating' ? (
               t(UI.evaluating)
             ) : tally === 'agree-partial' ? (
-              fill(t(UI.tallyCleanPartial), engines.length, ALL_ENGINES.length, MAP_REQUESTS.length)
+              fill(
+                t(UI.tallyCleanPartial),
+                compared.length,
+                ALL_ENGINES.length,
+                MAP_REQUESTS.length,
+              )
             ) : tally === 'agree' ? (
               fill(t(UI.tallyClean), MAP_REQUESTS.length)
             ) : (
@@ -524,7 +486,7 @@ export default function App() {
           <MapKey lang={lang} />
           <RequestMap
             lang={lang}
-            engines={engines.map((e) => e.meta)}
+            engines={compared.map((e) => e.meta)}
             requests={MAP_REQUESTS}
             outcome={outcome}
             selected={selectedIndex}
