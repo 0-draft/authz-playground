@@ -1,6 +1,6 @@
 # Authz Playground
 
-Give Cedar, OPA / Rego, Casbin and ReBAC (Zanzibar) the same authorization rules, then watch where their answers diverge — and what each design gave up to draw its line where it did.
+Give Cedar, OPA / Rego, Casbin and ReBAC (Zanzibar) the same authorization rules, then watch where their answers diverge — and what each design gave up to draw its line where it did. A fifth engine runs the same ReBAC model with the conditions OpenFGA added later, so the gap and the fix sit side by side.
 
 Everything runs in the browser. There is no backend.
 
@@ -17,7 +17,22 @@ Requirements are then added one at a time:
 | 3     | Editing only during business hours      | Request-time context enters the decision.  |
 | 4     | Public documents are viewable by anyone | A resource attribute enters the decision.  |
 
-At stage 3 the ReBAC model stops agreeing with the others. This is not a bug in the comparison: `check(user, relation, object)` has three arguments and none of them can carry a time of day. OpenFGA added Conditions years later to close exactly this gap.
+At stage 3 the classic ReBAC model stops agreeing with the others. This is not a bug in the comparison: `check(user, relation, object)` has three arguments and none of them can carry a time of day.
+
+The fifth engine shows how that gap was closed. It keeps the classic model's relationships for the grant and adds one OpenFGA-style conditional tuple per document, intersected with it:
+
+```text
+define within_hours: [user:* with business_hours]
+define editor: (owner or admin from parent) and within_hours
+
+condition business_hours(hour: int) {
+  hour >= 9 && hour < 18
+}
+```
+
+Relationships still decide who may edit; the condition, evaluated against the request context at check time, decides when. With it, the ReBAC model agrees with Cedar, Rego and Casbin on every request. SpiceDB calls the same mechanism a caveat. A conditional tuple checked without the context it needs is reported as an error rather than a quiet deny, as OpenFGA does.
+
+The page leads with one question asked at every hour of the day: each engine's answer is drawn as a timing trace, with the hours where they disagree marked in red. Below it, all 72 requests of the stage are laid out by action, resource and hour.
 
 The Rego policy can also be edited on the page. OPA compiles each edit, runs it against every request in the map, and lists the requests whose decision changed from the shipped policy.
 
@@ -30,7 +45,7 @@ So the projections are the interesting part, and their fidelity is verified mech
 1. A bug in the projection, which is a defect to fix.
 2. A genuine semantic difference between engines, which is the teaching material.
 
-The test suite pins this down: the three context-capable engines must agree on every request at every stage, and ReBAC must be the only engine that ever diverges. If a projection quietly grants something the requirements never asked for, CI fails.
+The test suite pins this down: the four context-capable engines (Cedar, Rego, Casbin and ReBAC with conditions) must agree on every request at every stage, and classic ReBAC must be the only engine that ever diverges. The business-hours window is also checked directly at 08, 09, 17 and 18, because agreement alone cannot catch a window every engine got wrong in the same way. If a projection quietly grants something the requirements never asked for, CI fails.
 
 Each engine also _declares_ which requirements it can express, and a test asserts that the declaration matches the measured behaviour. The expressiveness matrix cannot drift away from the truth without breaking the build.
 
@@ -55,14 +70,15 @@ npm run build
 
 ## How each engine runs in the browser
 
-| Engine     | How it evaluates                                                       |
-| ---------- | ---------------------------------------------------------------------- |
-| Cedar      | Official `@cedar-policy/cedar-wasm` bindings                           |
-| OPA / Rego | OPA compiled to `js/wasm`, so policies are compiled and evaluated live |
-| Casbin     | `casbin`, the TypeScript implementation, runs directly                 |
-| ReBAC      | A teaching reimplementation of the Zanzibar check algorithm            |
+| Engine             | How it evaluates                                                       |
+| ------------------ | ---------------------------------------------------------------------- |
+| Cedar              | Official `@cedar-policy/cedar-wasm` bindings                           |
+| OPA / Rego         | OPA compiled to `js/wasm`, so policies are compiled and evaluated live |
+| Casbin             | `casbin`, the TypeScript implementation, runs directly                 |
+| ReBAC              | A teaching reimplementation of the Zanzibar check algorithm            |
+| ReBAC + Conditions | The same reimplementation, with conditional tuples and `and`           |
 
-The ReBAC engine is not OpenFGA. It reimplements the parts that matter for understanding the model — relation rewrites and tuple-to-userset traversal — and is labelled as such in the interface.
+Neither ReBAC engine is OpenFGA. They reimplement the parts that matter for understanding the model — relation rewrites, tuple-to-userset traversal, intersection and conditional tuples — and are labelled as such in the interface.
 
 ## A note on Casbin role definitions
 
