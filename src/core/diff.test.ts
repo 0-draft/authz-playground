@@ -244,8 +244,10 @@ describe('ReBAC with Conditions closes the gap without touching the grant', () =
   const at = (hour: number) => ({ hour, mfa: true });
 
   it('declares R3 expressible, and agrees with Cedar on every request at stage 3', async () => {
+    // Expressible, but not native: the condition needs a placeholder tuple per document,
+    // because R3 is about the request and conditions can only hang off a tuple.
     expect(rebacConditionsEngine.project(DEFAULT_SCENARIO, step(3), 'en').support.R3.level).toBe(
-      'native',
+      'awkward',
     );
     const report = await runDifferential(
       [cedarEngine, rebacConditionsEngine],

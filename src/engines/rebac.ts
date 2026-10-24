@@ -433,10 +433,13 @@ const SUPPORT: Record<string, RequirementSupport> = {
 const CONDITIONS_SUPPORT: Record<string, RequirementSupport> = {
   ...SHARED_SUPPORT,
   R3: {
-    level: 'native',
+    // Conditions are a first-class feature, but they hang off tuples. A rule about the
+    // request alone has no tuple of its own, so it needs a placeholder per document.
+    // That cost is what keeps this from being rated native beside Cedar and Rego.
+    level: 'awkward',
     note: {
-      en: 'The relationships still decide who may edit; a condition decides when. One wildcard tuple per document carries business_hours, check() takes the request context as a fourth argument, and `and` joins the two. OpenFGA enabled this by default in v1.4 (2023); SpiceDB had already shipped it as experimental caveats in v1.14 (2022).',
-      ja: '誰が編集できるかは引き続き関係が決め、いつ編集できるかを condition が決める。document ごとに business_hours 付きの wildcard タプルを1本置き、check() はリクエストの context を第4引数として受け取り、`and` で両者を結ぶ。OpenFGA は v1.4 (2023年) でこれを既定で有効にした。SpiceDB はそれより早く v1.14 (2022年) で同じ仕組みを実験的な caveat として出している。',
+      en: 'Conditions are built in, and check() takes the request context as a fourth argument. But a condition can only be attached to a tuple, and R3 is about the request rather than any relationship. So each document gets a placeholder wildcard tuple that exists only to carry business_hours, joined to the grant with `and`, and the tuple set grows with the documents. OpenFGA enabled conditions by default in v1.4 (2023); SpiceDB had already shipped them as experimental caveats in v1.14 (2022).',
+      ja: 'condition は言語に組み込まれており、check() はリクエストの context を第4引数として受け取る。ただし condition はタプルにしか付けられず、R3 はどの関係でもなくリクエストについての要件である。そのため document ごとに business_hours を運ぶためだけの wildcard タプルを置き、`and` で付与と結ぶことになり、タプルは document の数だけ増える。OpenFGA は v1.4 (2023年) で condition を既定で有効にした。SpiceDB はそれより早く v1.14 (2022年) で同じ仕組みを実験的な caveat として出している。',
     },
   },
 };
