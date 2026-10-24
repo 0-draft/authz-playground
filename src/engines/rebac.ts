@@ -435,8 +435,8 @@ const CONDITIONS_SUPPORT: Record<string, RequirementSupport> = {
   R3: {
     level: 'native',
     note: {
-      en: 'The relationships still decide who may edit; a condition decides when. One wildcard tuple per document carries business_hours, check() takes the request context as a fourth argument, and `and` joins the two. SpiceDB calls the same idea a caveat.',
-      ja: '誰が編集できるかは引き続き関係が決め、いつ編集できるかを condition が決める。document ごとに business_hours 付きの wildcard タプルを1本置き、check() はリクエストの context を第4引数として受け取り、`and` で両者を結ぶ。SpiceDB では同じ仕組みを caveat と呼ぶ。',
+      en: 'The relationships still decide who may edit; a condition decides when. One wildcard tuple per document carries business_hours, check() takes the request context as a fourth argument, and `and` joins the two. OpenFGA enabled this in v1.4 (2023); SpiceDB had already shipped it as experimental caveats in v1.14 (2022).',
+      ja: '誰が編集できるかは引き続き関係が決め、いつ編集できるかを condition が決める。document ごとに business_hours 付きの wildcard タプルを1本置き、check() はリクエストの context を第4引数として受け取り、`and` で両者を結ぶ。OpenFGA は v1.4 (2023年) でこれを既定で有効にした。SpiceDB はそれより早く v1.14 (2022年) で同じ仕組みを実験的な caveat として出している。',
     },
   },
 };
@@ -577,8 +577,10 @@ export const rebacConditionsEngine: PolicyEngine = {
       en: 'Relationship tuples that may carry a condition, evaluated against the request context at check time',
       ja: '条件付きの関係タプルを、check 時にリクエストの context で評価する方式',
     },
+    // OpenFGA v1.4.0 (2023-12) enabled conditional relationship tuples by default.
+    // SpiceDB shipped the same idea earlier, as experimental caveats in v1.14.0 (2022-11).
     year: 2023,
-    origin: 'OpenFGA Conditions / SpiceDB caveats',
+    origin: 'OpenFGA v1.4 Conditions',
     tagline: {
       en: 'The same graph, with an attribute check laid on top. Relationships say who; a condition says when.',
       ja: '同じグラフの上に属性による判定を重ねる。誰かは関係が、いつかは condition が決める。',

@@ -119,7 +119,10 @@ export const UI = {
   },
   graphAlt: { en: 'Relationship tuples and the path walked', ja: '関係タプルのグラフと探索経路' },
   variantClassic: { en: 'Zanzibar (2019)', ja: 'Zanzibar (2019)' },
-  variantConditions: { en: 'With conditions (2023)', ja: 'condition 付き (2023)' },
+  variantConditions: {
+    en: 'With conditions (OpenFGA v1.4, 2023)',
+    ja: 'condition 付き (OpenFGA v1.4, 2023年)',
+  },
   graphReached: { en: 'Reached %1.', ja: '%1 に到達した。' },
   graphNotReached: { en: 'No path to %1.', ja: '%1 への経路がない。' },
   conditionFalse: { en: 'false at %1', ja: '%1 では偽' },

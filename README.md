@@ -30,7 +30,7 @@ condition business_hours(hour: int) {
 }
 ```
 
-Relationships still decide who may edit; the condition, evaluated against the request context at check time, decides when. With it, the ReBAC model agrees with Cedar, Rego and Casbin on every request. SpiceDB calls the same mechanism a caveat. A conditional tuple checked without the context it needs is reported as an error rather than a quiet deny, as OpenFGA does.
+Relationships still decide who may edit; the condition, evaluated against the request context at check time, decides when. With it, the ReBAC model agrees with Cedar, Rego and Casbin on every request. OpenFGA enabled conditional tuples by default in v1.4.0 (December 2023); SpiceDB had shipped the same mechanism earlier, as experimental caveats in v1.14.0 (November 2022). A conditional tuple checked without the context it needs is reported as an error rather than a quiet deny, as OpenFGA does.
 
 The page leads with one question asked at every hour of the day: each engine's answer is drawn as a timing trace, with the hours where they disagree marked in red. Below it, all 72 requests of the stage are laid out by action, resource and hour.
 
