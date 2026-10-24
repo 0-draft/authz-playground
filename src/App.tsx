@@ -531,10 +531,10 @@ export default function App() {
                       };
                     }}
                   />
-                  <div className="trace">
-                    <h3>{t(UI.traceLabel)}</h3>
+                  <details className="trace">
+                    <summary>{t(UI.traceLabel)}</summary>
                     <pre tabIndex={0}>{x.trace.join('\n')}</pre>
-                  </div>
+                  </details>
                 </figure>
               );
             })}

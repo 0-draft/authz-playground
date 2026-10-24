@@ -984,14 +984,16 @@ main {
 
 .graphs {
   display: grid;
-  gap: 40px;
+  gap: 48px;
 }
 
 .graph {
   margin: 0;
   display: grid;
-  grid-template-columns: minmax(0, 640px) minmax(0, 1fr);
-  gap: 12px 40px;
+  /* The trace sits under its graph. The page is never wide enough for both side by
+     side without shrinking the graph or clipping the trace. */
+  grid-template-columns: minmax(0, 780px);
+  gap: 12px;
   align-items: start;
 }
 
@@ -1016,12 +1018,6 @@ main {
 
 .graph-result[data-d='allow'] {
   color: var(--ink);
-}
-
-@media (max-width: 1000px) {
-  .graph {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .rgraph {
@@ -1107,11 +1103,16 @@ main {
   min-width: 0;
 }
 
-.trace h3 {
-  margin: 0 0 6px;
-  font-size: 13px;
-  font-weight: 600;
+.trace summary {
+  cursor: pointer;
+  width: fit-content;
+  font-size: 13.5px;
   color: var(--ink-2);
+  padding: 2px 0;
+}
+
+.trace[open] summary {
+  margin-bottom: 6px;
 }
 
 .trace pre {
