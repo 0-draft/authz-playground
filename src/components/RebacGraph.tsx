@@ -1,116 +1,163 @@
 import type { Tuple } from '../engines/rebac';
 
-const COL_X = { user: 16, folder: 232, document: 448 } as const;
-const BOX_W = 156;
-const BOX_H = 34;
-const ROW_H = 58;
-
-type NodeType = keyof typeof COL_X;
-
-function typeOf(ref: string): NodeType {
-  const t = ref.split(':')[0];
-  return t === 'user' || t === 'folder' || t === 'document' ? t : 'document';
-}
+const VIEW_W = 720;
+const BOX_W = 180;
+const BOX_H = 32;
+const ROW_H = 54;
+// The middle column sits left of centre: user-to-folder edges are short and straight,
+// while the fan-in to the documents needs room to curve.
+const COL_X = [0, 222, VIEW_W - BOX_W];
+/** Approximate advance of one character of the 11.5px monospace label face. */
+const CHAR_W = 6.9;
+const LINE_H = 13;
 
 const key = (t: Tuple) => `${t.user}|${t.relation}|${t.object}`;
 
 /**
- * Draws the relationship tuples as a graph and highlights only the path that made
- * the decision hold, showing Zanzibar's "permission is reachability" idea directly.
+ * Users on the left, documents on the right, and everything a path passes through in
+ * the middle: folders, and the wildcard user that carries a condition.
  */
-export function RebacGraph({
-  tuples,
-  path,
-  label,
-}: {
+function columnOf(ref: string): 0 | 1 | 2 {
+  if (ref === 'user:*' || ref.startsWith('folder:')) return 1;
+  return ref.startsWith('user:') ? 0 : 2;
+}
+
+interface Props {
   tuples: Tuple[];
   path: Tuple[];
   label: string;
-}) {
+  /** For a conditional tuple: whether its condition holds for the request, and a caption. */
+  conditionState?: (t: Tuple) => { holds: boolean; caption: string } | undefined;
+}
+
+/** A point on the cubic from (x1,y1) to (x2,y2) with horizontal tangents at both ends. */
+function along(x1: number, y1: number, x2: number, y2: number, t: number) {
+  const mx = (x1 + x2) / 2;
+  const u = 1 - t;
+  return {
+    x: u * u * u * x1 + 3 * u * u * t * mx + 3 * u * t * t * mx + t * t * t * x2,
+    y: u * u * u * y1 + 3 * u * u * t * y1 + 3 * u * t * t * y2 + t * t * t * y2,
+  };
+}
+
+/**
+ * Draws the relationship tuples as a graph and highlights only the path that made the
+ * decision hold, showing Zanzibar's "permission is reachability" idea directly.
+ *
+ * The middle column starts below the last document row. Direct user-to-document edges
+ * then cross an empty band instead of running through a folder box, which is what
+ * every earlier layout of this diagram got wrong in one way or another.
+ */
+export function RebacGraph({ tuples, path, label, conditionState }: Props) {
   const hit = new Set(path.map(key));
 
-  const byCol: Record<NodeType, string[]> = { user: [], folder: [], document: [] };
+  const cols: string[][] = [[], [], []];
   for (const t of tuples) {
     for (const ref of [t.user, t.object]) {
-      const col = typeOf(ref);
-      if (!byCol[col].includes(ref)) byCol[col].push(ref);
+      const c = columnOf(ref);
+      if (!cols[c].includes(ref)) cols[c].push(ref);
     }
   }
+  // The wildcard is not a place in the hierarchy, so it sits under the folders.
+  cols[1].sort((a, b) => Number(a === 'user:*') - Number(b === 'user:*'));
 
+  const middleStart = cols[2].length;
   const pos = new Map<string, { x: number; y: number }>();
-  for (const col of Object.keys(byCol) as NodeType[]) {
-    byCol[col].forEach((ref, i) => {
-      pos.set(ref, { x: COL_X[col], y: 20 + i * ROW_H });
+  cols.forEach((refs, c) =>
+    refs.forEach((ref, i) =>
+      pos.set(ref, { x: COL_X[c], y: (c === 1 ? middleStart + i : i) * ROW_H }),
+    ),
+  );
+  const rows = Math.max(cols[0].length, cols[2].length, middleStart + cols[1].length);
+
+  // A conditional tuple's condition is the same for every edge out of its node, so it
+  // is written once under the node rather than repeated on each edge.
+  const gate = new Map<string, { name: string; holds: boolean; caption: string }>();
+  for (const t of tuples) {
+    const c = t.condition ? conditionState?.(t) : undefined;
+    if (c && !gate.has(t.user)) gate.set(t.user, { name: t.condition!, ...c });
+  }
+
+  type Edge = { t: Tuple; d: string; lx: number; ly: number; state: 'hit' | 'veto' | 'idle' };
+  const edges: Edge[] = [];
+  const placed: { x0: number; x1: number; y0: number; y1: number }[] = [];
+  // Node boxes and their captions count as occupied, so no label is set on top of one.
+  for (const [ref, p] of pos) {
+    placed.push({ x0: p.x, x1: p.x + BOX_W, y0: p.y, y1: p.y + BOX_H + (gate.has(ref) ? 16 : 0) });
+  }
+
+  for (const t of tuples) {
+    const a = pos.get(t.user);
+    const b = pos.get(t.object);
+    if (!a || !b) continue;
+    const x1 = a.x + BOX_W;
+    const y1 = a.y + BOX_H / 2;
+    const x2 = b.x;
+    const y2 = b.y + BOX_H / 2;
+    const mx = (x1 + x2) / 2;
+    const g = gate.get(t.user);
+
+    // Walk along the curve from its middle until the label lands somewhere free, then
+    // nudge it down a line at a time if it still collides.
+    const w = t.relation.length * CHAR_W + 8;
+    const free = (x: number, y: number) =>
+      !placed.some(
+        (r) => x - w / 2 < r.x1 && x + w / 2 > r.x0 && y - LINE_H + 2 < r.y1 && y + 2 > r.y0,
+      );
+    let spot = along(x1, y1, x2, y2, 0.5);
+    for (const tt of [0.5, 0.4, 0.6, 0.3, 0.7]) {
+      const p = along(x1, y1, x2, y2, tt);
+      if (free(p.x, p.y - 4)) {
+        spot = p;
+        break;
+      }
+    }
+    let ly = spot.y - 4;
+    for (let guard = 0; guard < 6 && !free(spot.x, ly); guard++) ly += LINE_H;
+    placed.push({ x0: spot.x - w / 2, x1: spot.x + w / 2, y0: ly - LINE_H + 2, y1: ly + 2 });
+
+    edges.push({
+      t,
+      d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`,
+      lx: spot.x,
+      ly,
+      state: hit.has(key(t)) ? 'hit' : g && !g.holds ? 'veto' : 'idle',
     });
   }
 
-  const rows = Math.max(1, ...Object.values(byCol).map((c) => c.length));
-  const height = 20 + rows * ROW_H;
-  // Room above the boxes for edges that have to hop a column, and how far clear of a
-  // box the curve itself must actually pass.
-  const HEADROOM = 44;
-  const ARC_CLEARANCE = 10;
+  const bottom = Math.max(rows * ROW_H, ...placed.map((r) => r.y1)) + 8;
+  const top = Math.min(-4, ...placed.map((r) => r.y0 - 4));
 
   return (
-    <svg viewBox={`0 ${-HEADROOM} 620 ${height + HEADROOM}`} role="img" aria-label={label}>
-      {tuples.map((t) => {
-        const a = pos.get(t.user);
-        const b = pos.get(t.object);
-        if (!a || !b) return null;
-        const on = hit.has(key(t));
-        const x1 = a.x + BOX_W;
-        const y1 = a.y + BOX_H / 2;
-        const x2 = b.x;
-        const y2 = b.y + BOX_H / 2;
-        const mx = (x1 + x2) / 2;
-
-        // An edge spanning more than one column runs straight through whatever sits
-        // between, so the owner edge appeared to pass through the folder and the diagram
-        // contradicted the trace printed beneath it.
-        //
-        // Arcing over it is not as simple as lifting the control points: a cubic never
-        // reaches them. For a symmetric curve the highest point is at t=0.5 and equals
-        // (y1 + 3·cy + 3·cy + y2) / 8, so placing the control points just above the box
-        // still left the curve clipping its corners. Solve for the control height that
-        // puts the curve itself the wanted distance clear instead.
-        const spansAColumn = x2 - x1 > BOX_W;
-        const peak = Math.min(y1, y2) - BOX_H / 2 - ARC_CLEARANCE;
-        const apexY = (8 * peak - y1 - y2) / 6;
-        const d = spansAColumn
-          ? `M${x1},${y1} C${x1 + 60},${apexY} ${x2 - 60},${apexY} ${x2},${y2}`
-          : `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
-        // Two edges into the same object share a midpoint, so their labels landed on top
-        // of each other. Stagger by how many arcs already end there.
-        const siblings = tuples.filter(
-          (o) => o.object === t.object && pos.has(o.user) && pos.get(o.user)!.x + BOX_W < b.x,
-        );
-        const rank = siblings.findIndex((o) => key(o) === key(t));
-        const labelY = spansAColumn ? peak - 4 - Math.max(0, rank) * 12 : (y1 + y2) / 2 - 5;
-
-        return (
-          <g key={key(t)}>
-            <path className={`edge${on ? ' hit' : ''}`} d={d} />
-            <text className={`edge-t${on ? ' hit' : ''}`} x={mx} y={labelY} textAnchor="middle">
-              {t.relation}
-            </text>
-          </g>
-        );
-      })}
-
+    <svg
+      className="rgraph"
+      viewBox={`0 ${top} ${VIEW_W} ${bottom - top}`}
+      role="img"
+      aria-label={label}
+    >
+      {/* Paths first, then every label, so no curve is drawn over a label. */}
+      {edges.map((e) => (
+        <path key={key(e.t)} className={`r-edge ${e.state}`} d={e.d} />
+      ))}
+      {edges.map((e) => (
+        <text key={key(e.t)} className={`r-label ${e.state}`} x={e.lx} y={e.ly} textAnchor="middle">
+          {e.t.relation}
+        </text>
+      ))}
       {[...pos.entries()].map(([ref, p]) => {
         const on = path.some((t) => t.user === ref || t.object === ref);
+        const g = gate.get(ref);
         return (
-          <g key={ref}>
-            <rect
-              className={`node-box${on ? ' hit' : ''}`}
-              x={p.x}
-              y={p.y}
-              width={BOX_W}
-              height={BOX_H}
-            />
-            <text className={`node-t${on ? '' : ' dim'}`} x={p.x + 10} y={p.y + 22}>
+          <g key={ref} className={`r-node${on ? ' hit' : ''}${g && !g.holds ? ' veto' : ''}`}>
+            <rect x={p.x} y={p.y} width={BOX_W} height={BOX_H} />
+            <text x={p.x + 10} y={p.y + 20.5}>
               {ref}
             </text>
+            {g && (
+              <text className="r-cond" x={p.x} y={p.y + BOX_H + 14}>
+                {g.name}: {g.caption}
+              </text>
+            )}
           </g>
         );
       })}

@@ -9,15 +9,17 @@ import { regoEngine } from '../engines/rego';
 import {
   MAX_DEPTH,
   checkForTest,
+  explainRebac,
   makeEvaluator,
+  rebacConditionsEngine,
   rebacEngine,
   rebacInternalsForTest,
 } from '../engines/rebac';
 import type { Rewrite, Tuple } from '../engines/rebac';
 
-const ALL = [cedarEngine, regoEngine, casbinEngine, rebacEngine];
+const ALL = [cedarEngine, regoEngine, casbinEngine, rebacEngine, rebacConditionsEngine];
 /** Engines that can express request context. These must agree with each other exactly. */
-const CONTEXT_CAPABLE = [cedarEngine, regoEngine, casbinEngine];
+const CONTEXT_CAPABLE = [cedarEngine, regoEngine, casbinEngine, rebacConditionsEngine];
 
 const step = (id: number) => STEPS.find((s) => s.id === id)!.requirements;
 
@@ -26,7 +28,7 @@ describe('fidelity of the projections', () => {
   // can be trusted. If this breaks, the whole comparison is a lie, so it is the
   // invariant guarded most closely.
   for (const s of STEPS) {
-    it(`stage ${s.id} (${s.title.en}): the three context-capable engines agree exactly`, async () => {
+    it(`stage ${s.id} (${s.title.en}): the context-capable engines agree exactly`, async () => {
       const report = await runDifferential(CONTEXT_CAPABLE, DEFAULT_SCENARIO, s.requirements);
       expect(report.totalRequests).toBeGreaterThan(0);
       expect(report.errors).toEqual({});
@@ -75,7 +77,7 @@ describe('the business-hours boundary', () => {
 
 describe('every engine matches an independent reading of the requirements', () => {
   // Agreement between engines only proves they made the same choice, not the right one.
-  // A misreading shared by all four — "the owner may also view", say — would be
+  // A misreading shared by every engine — "the owner may also view", say — would be
   // invisible to the differential harness. This checks each engine against a second
   // implementation written from the requirement text alone.
   //
@@ -190,7 +192,7 @@ describe('detecting structural limits', () => {
     // In every divergence, ReBAC is alone on the allow side.
     for (const d of report.divergences) {
       expect(d.allowed).toEqual(['rebac']);
-      expect(d.denied.sort()).toEqual(['casbin', 'cedar', 'rego']);
+      expect(d.denied.sort()).toEqual(['casbin', 'cedar', 'rebac-cond', 'rego']);
     }
   });
 
@@ -232,6 +234,81 @@ describe('detecting structural limits', () => {
     expect(report.errors).toEqual({});
     expect(report.disagreementPairs.length).toBeGreaterThan(0);
     expect(report.disagreementPairs.every((p) => p.a === 'rebac' || p.b === 'rebac')).toBe(true);
+  });
+});
+
+describe('ReBAC with Conditions closes the gap without touching the grant', () => {
+  // The classic model's divergence is only a lesson if adding the missing piece removes
+  // it. These pin down that the conditions variant agrees everywhere for the right
+  // reason: the relationships are unchanged and a condition gates them.
+  const at = (hour: number) => ({ hour, mfa: true });
+
+  it('declares R3 expressible, and agrees with Cedar on every request at stage 3', async () => {
+    // Expressible, but not native: the condition needs a placeholder tuple per document,
+    // because R3 is about the request and conditions can only hang off a tuple.
+    expect(rebacConditionsEngine.project(DEFAULT_SCENARIO, step(3), 'en').support.R3.level).toBe(
+      'awkward',
+    );
+    const report = await runDifferential(
+      [cedarEngine, rebacConditionsEngine],
+      DEFAULT_SCENARIO,
+      step(3),
+    );
+    expect(report.errors).toEqual({});
+    expect(report.divergences).toEqual([]);
+  });
+
+  it('the condition vetoes the edit but leaves ownership itself unconditional', () => {
+    const { tuples, rewrites } = rebacInternalsForTest(DEFAULT_SCENARIO, step(3), 'conditions');
+    const owner = (hour: number) =>
+      checkForTest(tuples, rewrites, 'user:alice', 'owner', 'document:design-doc', at(hour)).ok;
+    const editor = (hour: number) =>
+      checkForTest(tuples, rewrites, 'user:alice', 'editor', 'document:design-doc', at(hour)).ok;
+
+    expect(owner(3), 'alice owns the document at any hour').toBe(true);
+    expect(editor(3)).toBe(false);
+    expect(editor(10)).toBe(true);
+  });
+
+  it('a conditional tuple checked without context is an error, not a quiet deny', () => {
+    // OpenFGA refuses to evaluate a condition whose parameters are missing. Treating the
+    // tuple as absent instead would read as "not permitted" and hide the missing input.
+    const { tuples, rewrites } = rebacInternalsForTest(DEFAULT_SCENARIO, step(3), 'conditions');
+    const res = checkForTest(tuples, rewrites, 'user:alice', 'editor', 'document:design-doc');
+    expect(res.ok).toBe(false);
+    expect(res.aborted).toBe(true);
+    expect(res.reason).toContain('needs request context');
+  });
+
+  it('the drawn path omits a grant the condition vetoed', () => {
+    const req = (hour: number) => ({
+      subject: 'bob',
+      action: 'edit' as const,
+      resource: 'design-doc',
+      context: at(hour),
+    });
+    const outside = explainRebac(DEFAULT_SCENARIO, step(3), req(8), 'conditions');
+    expect(outside.ok).toBe(false);
+    expect(outside.path).toEqual([]);
+
+    const inside = explainRebac(DEFAULT_SCENARIO, step(3), req(9), 'conditions');
+    expect(inside.ok).toBe(true);
+    expect(inside.path.map((t) => t.relation).sort()).toEqual(['admin', 'parent', 'within_hours']);
+  });
+
+  it('writes the grant and the gate as OpenFGA would', () => {
+    const dsl = (requirements: readonly string[]) =>
+      rebacConditionsEngine.project(DEFAULT_SCENARIO, requirements, 'en').sources[0].code;
+
+    expect(dsl(step(3))).toContain('define editor: (owner or admin from parent) and within_hours');
+    expect(dsl(step(3))).toContain('define within_hours: [user:* with business_hours]');
+    expect(dsl(step(3))).toContain('condition business_hours(hour: int) {');
+    // One operand needs no parentheses.
+    expect(dsl(['R1', 'R3'])).toContain('define editor: owner and within_hours');
+    // Before R3 there is nothing to gate, so the model is the classic one.
+    expect(dsl(step(2))).toBe(rebacEngine.project(DEFAULT_SCENARIO, step(2), 'en').sources[0].code);
+    // R3 alone grants nothing, so there is nothing to gate either.
+    expect(dsl(['R3'])).not.toContain('condition');
   });
 });
 
@@ -374,7 +451,7 @@ describe('the harness reports failure instead of hiding it', () => {
   it('every engine projects a requirement set that grants nothing', async () => {
     // R3 on its own only restricts; it grants no access. Casbin used to throw here
     // because node-casbin rejects an empty policy document, which made one engine
-    // unprojectable for an input the other three handle by denying everything.
+    // unprojectable for an input the others handle by denying everything.
     for (const engine of ALL) {
       const ev = await engine.prepare(DEFAULT_SCENARIO, ['R3']);
       const res = await ev.decide({

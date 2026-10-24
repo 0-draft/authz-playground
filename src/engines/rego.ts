@@ -100,8 +100,8 @@ export const regoEngine: PolicyEngine = {
     year: 2016,
     origin: 'Styra / CNCF',
     tagline: {
-      en: 'The centre of the policy-as-code movement. The most expressive of the four, and the one that asks the most of the person writing it.',
-      ja: 'policy as code の潮流の中心。4つの中で最も表現力が高く、そのぶん書き手に委ねられる範囲も広い。',
+      en: 'The centre of the policy-as-code movement. The most expressive engine here, and the one that asks the most of the person writing it.',
+      ja: 'policy as code の潮流の中心。ここで扱うエンジンの中で最も表現力が高く、そのぶん書き手に委ねられる範囲も広い。',
     },
   },
 
