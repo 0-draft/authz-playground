@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tallyState } from './tally';
+import { stageSummary, tallyState } from './tally';
 
 describe('what the summary line may claim', () => {
   it('says nothing while rows are still being computed', () => {
@@ -44,5 +44,30 @@ describe('an even split has no minority', () => {
   it('charges the outnumbered side otherwise', () => {
     expect(minorityOf(['allow', 'deny', 'deny', 'deny'])).toBe('allow');
     expect(minorityOf(['allow', 'allow', 'allow', 'deny'])).toBe('deny');
+  });
+});
+
+describe('what a stage in the stage bar may claim', () => {
+  const clean = { clash: [false, false], breaks: { cedar: 0, rebac: 0 } };
+
+  it('does not claim agreement while an engine is still loading', () => {
+    // The stage bar used to print "all agree" for any stage whose rows were in, which
+    // during the OPA download meant agreement among the engines that had loaded.
+    expect(stageSummary(clean, 4, 5).state).toBe('agree-partial');
+    expect(stageSummary(clean, 5, 5).state).toBe('agree');
+    expect(stageSummary(null, 5, 5).state).toBe('evaluating');
+  });
+
+  it('reports an even split as a disagreement even though nobody is the outlier', () => {
+    const evenSplit = { clash: [true, false], breaks: { cedar: 0, rebac: 0 } };
+    const s = stageSummary(evenSplit, 4, 4);
+    expect(s.state).toBe('disagree');
+    expect(s.clashes).toBe(1);
+    expect(s.outliers).toEqual([]);
+  });
+
+  it('names the engines in the minority', () => {
+    const s = stageSummary({ clash: [true, true], breaks: { cedar: 0, rebac: 2 } }, 5, 5);
+    expect(s.outliers).toEqual([['rebac', 2]]);
   });
 });

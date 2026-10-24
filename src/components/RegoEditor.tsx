@@ -66,7 +66,7 @@ export function RegoEditor({ lang, initial, requests, shipped, evaluate }: Props
             : [{ r, from: shipped[i], to: current.decisions[i] }],
         )
       : [];
-  const verdict = (d: Decision) => (d === 'allow' ? 'ALLOW' : 'DENY');
+  const verdict = (d: Decision) => t(d === 'allow' ? UI.allowWord : UI.denyWord);
 
   return (
     <div className="rego-editor">
