@@ -18,7 +18,7 @@
     "@cedar-policy/cedar-wasm": "^4.13.0",
     "buffer": "^6.0.3",
     "casbin": "^5.51.1",
-    "react": "^19.2.0",
+    "react": "^19.3.1",
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
