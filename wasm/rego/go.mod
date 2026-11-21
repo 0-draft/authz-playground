@@ -2,7 +2,7 @@ module authzplayground/wasm/rego
 
 go 1.27.1
 
-require github.com/open-policy-agent/opa v1.22.3
+require github.com/open-policy-agent/opa v1.22.4
 
 require (
 	github.com/agnivade/levenshtein v1.2.2 // indirect
